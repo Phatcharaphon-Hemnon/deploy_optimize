@@ -1,7 +1,0 @@
-numpy>=1.24
-matplotlib>=3.6
-streamlit>=1.32
-# Note: opencv-python is intentionally NOT a dashboard dependency. It is only
-# needed for the legacy animation path (plot.py Monitor / main.py video).
-# Verified locally with Python 3.14.7, numpy 2.5.2, matplotlib 3.11.1,
-# streamlit 1.64.0.

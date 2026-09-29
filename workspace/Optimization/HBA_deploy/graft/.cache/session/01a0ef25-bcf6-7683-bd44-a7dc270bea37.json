@@ -1,9 +1,0 @@
-{
-  "lastQuery": "fix plan for don't touch _tool and main.py and don't create testing file",
-  "perAgentQuery": {},
-  "graftReads": 0,
-  "sourceReads": 0,
-  "savedTokens": 0,
-  "injectedPointers": [],
-  "nudges": 2
-}
