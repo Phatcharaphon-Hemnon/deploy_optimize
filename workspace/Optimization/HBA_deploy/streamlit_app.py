@@ -99,7 +99,7 @@ def _run_form():
                      "an explicit seed (including 0) reproduces results.",
             )
         record_animation = st.checkbox(
-            "Record agent animation", value=False,
+            "Record agent animation", value=True,
             help="When enabled, one repetition per selected function records "
                  "agent trajectories for the moving-agent animation. "
                  "Recording copies populations only and never alters results.",
@@ -149,7 +149,7 @@ def _execute(cfg):
             seed_auto = False
     except ValueError as exc:
         st.error(str(exc))
-        return
+        return False
     progress = st.progress(0.0)
     status = st.empty()
     status.info("Running optimization…")
@@ -165,7 +165,7 @@ def _execute(cfg):
         status.empty()
         progress.empty()
         st.error(str(exc))
-        return
+        return False
     computed = charts.compute_all(results, KNOWN_OPTIMUM)
     st.session_state["hba_run_id"] += 1
     st.session_state["hba_results"] = results
@@ -189,6 +189,7 @@ def _execute(cfg):
         f"repetition seeds {settings.seeds[0]}–{settings.seeds[-1]} "
         "(same schedule across functions)."
     )
+    return True
 
 
 def _summary_rows(computed):
@@ -437,10 +438,27 @@ def _animation_section(name, results, settings):
     trajectory, rep = _recorded_trajectory(name, results, settings)
     if trajectory is None:
         st.info(
-            "Agent animation was not recorded for this run. "
-            "Start a new run with **Record agent animation** enabled to animate "
-            "agents on the contour/3D surface (optimization is never rerun automatically)."
+            "Agent animation was not recorded for this run."
         )
+        st.caption(
+            "Recovery reruns the complete experiment (all functions × repetitions) "
+            "with the saved settings and resolved master seed, recording repetition 1."
+        )
+        if st.button("Rerun with animation", key=f"rerun_anim_r{run_id}_{name}"):
+            cfg = {
+                "functions": list(settings.functions),
+                "agents": int(settings.agents),
+                "dimensions": int(settings.dimensions),
+                "iterations": int(settings.iterations),
+                "repetitions": int(settings.repetitions),
+                "lb": float(settings.lb),
+                "ub": float(settings.ub),
+                "seed": int(settings.seed),
+                "record_animation": True,
+                "record_rep": 1,
+            }
+            if _execute(cfg):
+                st.rerun()
         return
     n_frames = int(np.asarray(trajectory.frame_iterations).shape[0])
     st.caption(
