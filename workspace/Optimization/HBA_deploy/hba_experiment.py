@@ -94,6 +94,10 @@ LIMITS = {
     "repetitions": 100,
 }
 
+#: Trajectory recording caps for the moving-agent animation.
+TRAJECTORY_MAX_FRAMES = 100
+TRAJECTORY_MAX_BYTES = 64 * 1024 * 1024
+
 
 # ---------------------------------------------------------------------------
 # Validation
@@ -194,9 +198,100 @@ def derive_seeds(master_seed, repetitions):
     return [master_seed + r for r in range(repetitions)]
 
 
+def trajectory_bytes_per_frame(agents, dimensions):
+    """Bytes for one recorded frame (float64 populations, best, fitness)."""
+    agents = int(agents)
+    dimensions = int(dimensions)
+    # populations (agents x dim) + best position (dim) + pop fitness (agents) + best fitness (1)
+    return (agents * dimensions + dimensions + agents + 1) * 8
+
+
+def plan_trajectory_frames(iterations, agents, dimensions, n_functions):
+    """Choose evenly spaced frame iterations within the 64 MiB / 100-frame caps.
+
+    Includes iteration 0 (initialization) and the final iteration. Raises
+    ``ValueError`` with an explanation before execution when even two frames
+    cannot fit within 64 MiB across the selected functions.
+    """
+    iterations = int(iterations)
+    n_functions = int(n_functions)
+    if iterations < 1:
+        raise ValueError("Iterations must be a positive integer.")
+    if n_functions < 1:
+        raise ValueError("Select at least one function.")
+    per_frame_total = trajectory_bytes_per_frame(agents, dimensions) * n_functions
+    if per_frame_total <= 0:
+        raise ValueError("Invalid trajectory size.")
+    max_by_bytes = TRAJECTORY_MAX_BYTES // per_frame_total
+    if max_by_bytes < 2:
+        need = per_frame_total * 2
+        raise ValueError(
+            "Trajectory recording does not fit in 64 MiB: even 2 frames need "
+            f"~{need / (1024 * 1024):.1f} MiB "
+            f"({n_functions} function(s) x {agents} agents x {dimensions}D). "
+            "Reduce agents, dimensions, or the number of selected functions, "
+            "or disable 'Record agent animation'."
+        )
+    count = min(TRAJECTORY_MAX_FRAMES, iterations + 1, int(max_by_bytes))
+    count = max(2, int(count))
+    if count >= iterations + 1:
+        return list(range(iterations + 1))
+    frames = np.linspace(0, iterations, count).astype(int).tolist()
+    frames = sorted(set(int(v) for v in frames))
+    if frames[0] != 0:
+        frames = [0] + frames
+    if frames[-1] != iterations:
+        frames = frames + [iterations]
+    # Re-enforce the cap if endpoint repair added entries.
+    while len(frames) > count:
+        # Drop an interior frame to keep endpoints.
+        frames.pop(len(frames) // 2)
+    return frames
+
+
+def validate_record_rep(record_rep, repetitions):
+    """Validate the 1-indexed repetition chosen for trajectory recording."""
+    if isinstance(record_rep, bool) or not isinstance(record_rep, (int, np.integer)):
+        raise ValueError(f"Record repetition must be an integer, got {record_rep!r}.")
+    record_rep = int(record_rep)
+    if record_rep < 1 or record_rep > int(repetitions):
+        raise ValueError(
+            f"Record repetition must be in [1, {int(repetitions)}], got {record_rep}."
+        )
+    return record_rep
+
+
 # ---------------------------------------------------------------------------
 # Results
 # ---------------------------------------------------------------------------
+
+
+@dataclass
+class TrajectoryRecording:
+    """Recorded frames for one repetition (moving-agent animation source)."""
+
+    function_name: str = ""
+    seed: int = 0
+    repetition: int = 1  # 1-indexed repetition number
+    frame_iterations: np.ndarray = field(default_factory=lambda: np.zeros(0, dtype=int))
+    populations: np.ndarray = field(default_factory=lambda: np.zeros((0, 0, 0)))
+    best_positions: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))
+    population_fitness: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))
+    best_fitness: np.ndarray = field(default_factory=lambda: np.zeros(0))
+
+    def n_frames(self):
+        return int(np.asarray(self.frame_iterations).shape[0])
+
+    def to_meta(self):
+        return {
+            "function": self.function_name,
+            "seed": int(self.seed),
+            "repetition": int(self.repetition),
+            "frames": int(self.n_frames()),
+            "frame_iterations": [int(v) for v in np.asarray(self.frame_iterations).tolist()],
+            "agents": int(np.asarray(self.populations).shape[1]) if np.asarray(self.populations).ndim == 3 else 0,
+            "dimensions": int(np.asarray(self.populations).shape[2]) if np.asarray(self.populations).ndim == 3 else 0,
+        }
 
 
 @dataclass
@@ -209,6 +304,7 @@ class RunResult:
     dimensions: int = 0
     agents: int = 0
     iterations: int = 0
+    trajectory: object = None  # optional TrajectoryRecording for the recorded repetition
 
     def __post_init__(self):
         self.best_position = np.asarray(self.best_position, dtype=float)
@@ -238,6 +334,9 @@ class ExperimentSettings:
     ub: float = DEFAULTS["ub"]
     seed: int = DEFAULTS["seed"]
     seeds: list = field(default_factory=list)
+    record_animation: bool = False
+    record_rep: int = 1
+    record_frames: list = field(default_factory=list)
 
     def to_dict(self):
         return {
@@ -251,6 +350,9 @@ class ExperimentSettings:
             "seed": self.seed,
             "seeds": list(self.seeds),
             "known_optimum": KNOWN_OPTIMUM,
+            "record_animation": bool(self.record_animation),
+            "record_rep": int(self.record_rep),
+            "record_frames": [int(v) for v in list(self.record_frames)],
         }
 
 
@@ -259,7 +361,8 @@ class ExperimentSettings:
 # ---------------------------------------------------------------------------
 
 
-def optimize(function_name, dimensions, agents, iterations, lb, ub, seed):
+def optimize(function_name, dimensions, agents, iterations, lb, ub, seed,
+             record_frames=None, record_repetition=1):
     """Run one HBA repetition; return a :class:`RunResult`.
 
     Uses the update equations from ``main.py`` with ``c=1``, ``beta=6`` and
@@ -267,12 +370,27 @@ def optimize(function_name, dimensions, agents, iterations, lb, ub, seed):
     best-population initialization (argmin fitness), per-agent digging/honey
     updates with clipping to bounds, and greedy acceptance for both the agent
     and the global best (``<=`` comparisons, as in ``main.py``).
+
+    When ``record_frames`` is a collection of iteration numbers (0 is the
+    initialization, ``iterations`` is the final state), population snapshots
+    are copied at those iterations. Recording performs no random draws, so
+    numerical results are identical with recording on or off.
     """
     functions = validate_functions([function_name])
     agents, dimensions, iterations, _reps = validate_counts(agents, dimensions, iterations, 1, functions)
     lb_f, ub_f = validate_bounds(lb, ub, functions)
     seed = validate_seed(seed)
     func = FUNCTIONS[function_name]
+    frame_set = None
+    if record_frames is not None:
+        frame_set = set(int(v) for v in record_frames)
+
+    def _snapshot(store_iters, store_pops, store_bests, store_popfit, store_bestfit, it):
+        store_iters.append(int(it))
+        store_pops.append(np.array(pop, dtype=float, copy=True))
+        store_bests.append(np.array(pop[best_idx], dtype=float, copy=True))
+        store_popfit.append(np.array(fitness, dtype=float, copy=True))
+        store_bestfit.append(float(fitness[best_idx]))
 
     rng = np.random.default_rng(seed)
     pop = rng.uniform(low=0.0, high=1.0, size=(agents, dimensions)) * (ub_f - lb_f) + lb_f
@@ -283,6 +401,9 @@ def optimize(function_name, dimensions, agents, iterations, lb, ub, seed):
     best_idx = int(np.argmin(fitness))
     best_fitness = float(fitness[best_idx])
     history = [best_fitness]
+    rec_iters, rec_pops, rec_bests, rec_popfit, rec_bestfit = [], [], [], [], []
+    if frame_set is not None and 0 in frame_set:
+        _snapshot(rec_iters, rec_pops, rec_bests, rec_popfit, rec_bestfit, 0)
 
     for k in range(iterations):
         alpha = _HBA_C * math.exp(-k / iterations)
@@ -325,10 +446,24 @@ def optimize(function_name, dimensions, agents, iterations, lb, ub, seed):
                 # ``<=`` moves the best index on ties, matching ``main.py``.
                 best_idx = i
         history.append(float(np.min(fitness)))
+        if frame_set is not None and (k + 1) in frame_set:
+            _snapshot(rec_iters, rec_pops, rec_bests, rec_popfit, rec_bestfit, k + 1)
 
     best_idx = int(np.argmin(fitness))
     best_fitness = float(fitness[best_idx])
     best_position = np.array(pop[best_idx], dtype=float)
+    trajectory = None
+    if frame_set is not None:
+        trajectory = TrajectoryRecording(
+            function_name=function_name,
+            seed=seed,
+            repetition=int(record_repetition),
+            frame_iterations=np.asarray(rec_iters, dtype=int),
+            populations=np.asarray(rec_pops, dtype=float) if rec_pops else np.zeros((0, agents, dimensions)),
+            best_positions=np.asarray(rec_bests, dtype=float) if rec_bests else np.zeros((0, dimensions)),
+            population_fitness=np.asarray(rec_popfit, dtype=float) if rec_popfit else np.zeros((0, agents)),
+            best_fitness=np.asarray(rec_bestfit, dtype=float) if rec_bestfit else np.zeros(0),
+        )
     return RunResult(
         function_name=function_name,
         seed=seed,
@@ -338,18 +473,24 @@ def optimize(function_name, dimensions, agents, iterations, lb, ub, seed):
         dimensions=dimensions,
         agents=agents,
         iterations=iterations,
+        trajectory=trajectory,
     )
 
 
 def run_experiment(function_names, agents=DEFAULTS["agents"], dimensions=DEFAULTS["dimensions"],
                    iterations=DEFAULTS["iterations"], repetitions=DEFAULTS["repetitions"],
                    lb=DEFAULTS["lb"], ub=DEFAULTS["ub"], seed=DEFAULTS["seed"],
-                   progress_callback=None):
+                   progress_callback=None, record_trajectories=False, record_rep=1):
     """Run every selected function for all repetitions.
 
     Repetition ``r`` of every function uses seed ``seeds[r]`` (same schedule
     across functions). Returns ``(results, settings)`` where ``results`` maps
     function name to a list of :class:`RunResult`.
+
+    When ``record_trajectories`` is true, repetition ``record_rep``
+    (1-indexed) of each selected function records trajectory frames (at most
+    100 evenly spaced frames within 64 MiB). Recording copies populations and
+    consumes no randomness, so numerical results match a non-recorded run.
     """
     function_names = validate_functions(list(function_names))
     agents, dimensions, iterations, repetitions = validate_counts(
@@ -358,10 +499,19 @@ def run_experiment(function_names, agents=DEFAULTS["agents"], dimensions=DEFAULT
     lb_f, ub_f = validate_bounds(lb, ub, function_names)
     master = validate_seed(seed)
     seeds = derive_seeds(master, repetitions)
+    record_frames = []
+    if record_trajectories:
+        record_rep = validate_record_rep(record_rep, repetitions)
+        # Raises with an explanation before any optimization when 2 frames
+        # cannot fit in 64 MiB.
+        record_frames = plan_trajectory_frames(iterations, agents, dimensions, len(function_names))
+    else:
+        record_rep = 1
     settings = ExperimentSettings(
         functions=function_names, agents=agents, dimensions=dimensions,
         iterations=iterations, repetitions=repetitions, lb=lb_f, ub=ub_f,
-        seed=master, seeds=seeds,
+        seed=master, seeds=seeds, record_animation=bool(record_trajectories),
+        record_rep=int(record_rep), record_frames=list(record_frames),
     )
     results = {}
     total = len(function_names) * repetitions
@@ -369,9 +519,15 @@ def run_experiment(function_names, agents=DEFAULTS["agents"], dimensions=DEFAULT
     for name in function_names:
         runs = []
         for r in range(repetitions):
-            runs.append(
-                optimize(name, dimensions, agents, iterations, lb_f, ub_f, seeds[r])
-            )
+            if record_trajectories and (r + 1) == int(record_rep):
+                runs.append(
+                    optimize(name, dimensions, agents, iterations, lb_f, ub_f, seeds[r],
+                             record_frames=record_frames, record_repetition=int(record_rep))
+                )
+            else:
+                runs.append(
+                    optimize(name, dimensions, agents, iterations, lb_f, ub_f, seeds[r])
+                )
             done += 1
             if progress_callback is not None:
                 progress_callback(done / total)

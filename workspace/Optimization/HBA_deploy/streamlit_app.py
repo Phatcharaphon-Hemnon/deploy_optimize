@@ -51,19 +51,25 @@ def _init_state():
         st.session_state["hba_run_id"] = 0
     if "hba_seed_auto" not in st.session_state:
         st.session_state["hba_seed_auto"] = False
-    for key in ("hba_landscapes", "hba_landscape_pngs", "hba_landscape_meta"):
+    for key in ("hba_landscapes", "hba_landscape_pngs", "hba_landscape_meta",
+                "hba_animation_htmls", "hba_animation_meta"):
         if key not in st.session_state:
             st.session_state[key] = {}
+    if "hba_zip_bytes" not in st.session_state:
+        st.session_state["hba_zip_bytes"] = None
+    if "hba_zip_error" not in st.session_state:
+        st.session_state["hba_zip_error"] = None
+    if "hba_zip_prepared_for" not in st.session_state:
+        st.session_state["hba_zip_prepared_for"] = None
 
 
 def _run_form():
     with st.form("experiment_form"):
         st.subheader("Experiment configuration")
-        function_choice = st.selectbox(
-            "Function", FUNCTION_OPTIONS, index=0,
-            help="All functions runs the six local objectives; or pick one.",
+        functions = st.multiselect(
+            "Functions", FUNCTION_ORDER, default=list(FUNCTION_ORDER),
+            help="Select any subset of the six local objectives; at least one is required.",
         )
-        functions = list(FUNCTION_ORDER) if function_choice == "All functions" else [function_choice]
         col1, col2, col3 = st.columns(3)
         with col1:
             agents = st.number_input(
@@ -92,9 +98,20 @@ def _run_form():
                 help="Leave blank for a random seed drawn at submission; "
                      "an explicit seed (including 0) reproduces results.",
             )
+        record_animation = st.checkbox(
+            "Record agent animation", value=False,
+            help="When enabled, one repetition per selected function records "
+                 "agent trajectories for the moving-agent animation. "
+                 "Recording copies populations only and never alters results.",
+        )
+        record_rep = st.number_input(
+            "Repetition to record (1-indexed)", min_value=1,
+            max_value=LIMITS["repetitions"], value=1, step=1,
+            help="Which repetition to record for each selected function (default 1).",
+        )
         submitted = st.form_submit_button("Run experiment")
     return submitted, {
-        "functions": functions,
+        "functions": list(functions),
         "agents": int(agents),
         "dimensions": int(dimensions),
         "iterations": int(iterations),
@@ -102,6 +119,8 @@ def _run_form():
         "lb": float(lb),
         "ub": float(ub),
         "seed": None if seed is None else int(seed),
+        "record_animation": bool(record_animation),
+        "record_rep": int(record_rep),
     }
 
 
@@ -113,6 +132,13 @@ def _execute(cfg):
             cfg["repetitions"], names,
         )
         hba_experiment.validate_bounds(cfg["lb"], cfg["ub"], names)
+        record_animation = bool(cfg.get("record_animation", False))
+        record_rep = int(cfg.get("record_rep", 1))
+        if record_animation:
+            hba_experiment.validate_record_rep(record_rep, cfg["repetitions"])
+            # Explain before execution when even two frames cannot fit in 64 MiB.
+            hba_experiment.plan_trajectory_frames(
+                cfg["iterations"], cfg["agents"], cfg["dimensions"], len(names))
         if cfg["seed"] is None:
             import secrets
 
@@ -133,6 +159,7 @@ def _execute(cfg):
             iterations=cfg["iterations"], repetitions=cfg["repetitions"],
             lb=cfg["lb"], ub=cfg["ub"], seed=resolved_seed,
             progress_callback=progress.progress,
+            record_trajectories=record_animation, record_rep=record_rep,
         )
     except ValueError as exc:
         status.empty()
@@ -145,10 +172,15 @@ def _execute(cfg):
     st.session_state["hba_settings"] = settings
     st.session_state["hba_computed"] = computed
     st.session_state["hba_seed_auto"] = seed_auto
-    # Stale landscape artifacts belong to the previous experiment.
+    # Stale artifacts belong to the previous experiment.
     st.session_state["hba_landscapes"] = {}
     st.session_state["hba_landscape_pngs"] = {}
     st.session_state["hba_landscape_meta"] = {}
+    st.session_state["hba_animation_htmls"] = {}
+    st.session_state["hba_animation_meta"] = {}
+    st.session_state["hba_zip_bytes"] = None
+    st.session_state["hba_zip_error"] = None
+    st.session_state["hba_zip_prepared_for"] = None
     progress.progress(1.0)
     origin = "drawn at submission" if seed_auto else "explicit"
     status.success(
@@ -249,6 +281,7 @@ def _function_tab(results, settings, computed):
         pos_rows.append(row)
     st.dataframe(pos_rows, use_container_width=True)
     _landscape_section(name, results, settings)
+    _animation_section(name, results, settings)
 
 
 def _cached_grid(grid_key, compute):
@@ -383,6 +416,146 @@ def _landscape_section(name, results, settings):
         _render_landscape_kind(kind, grid, labels, name, prefix, meta)
 
 
+SPEED_TO_MS = {"0.5×": 600, "1×": 300, "2×": 150, "4×": 75}
+
+
+def _recorded_trajectory(name, results, settings):
+    rep = int(getattr(settings, "record_rep", 1))
+    if not bool(getattr(settings, "record_animation", False)):
+        return None, rep
+    runs = results.get(name, [])
+    if rep < 1 or rep > len(runs):
+        return None, rep
+    return runs[rep - 1].trajectory, rep
+
+
+def _animation_section(name, results, settings):
+    run_id = st.session_state["hba_run_id"]
+    dim = settings.dimensions
+    st.subheader("Animation")
+    st.caption("Convergence charts above remain static; only this section animates agents.")
+    trajectory, rep = _recorded_trajectory(name, results, settings)
+    if trajectory is None:
+        st.info(
+            "Agent animation was not recorded for this run. "
+            "Start a new run with **Record agent animation** enabled to animate "
+            "agents on the contour/3D surface (optimization is never rerun automatically)."
+        )
+        return
+    n_frames = int(np.asarray(trajectory.frame_iterations).shape[0])
+    st.caption(
+        f"Recorded repetition {rep} (seed {int(trajectory.seed)}): "
+        f"{n_frames} frames from iteration {int(trajectory.frame_iterations[0])} "
+        f"to {int(trajectory.frame_iterations[-1])}, including initialization and final iteration."
+    )
+    func = hba_experiment.FUNCTIONS[name]
+    lb, ub = settings.lb, settings.ub
+    speed = st.selectbox(
+        "Playback speed", list(SPEED_TO_MS), index=1,
+        key=f"anim_speed_r{run_id}_{name}",
+        help="Frame duration only; playback never reruns optimization.",
+    )
+    frame_ms = SPEED_TO_MS[speed]
+    if dim == 1:
+        grid = _cached_grid(
+            (run_id, name, "line"),
+            lambda: charts.evaluate_landscape_1d(func, lb, ub))
+        xs, ys = grid
+        try:
+            fig = charts.build_animation_1d(
+                xs, ys, trajectory, name, rep, int(trajectory.seed),
+                lb, ub, frame_ms=frame_ms)
+        except (ValueError, ImportError) as exc:
+            st.warning(str(exc))
+            return
+        st.plotly_chart(fig, use_container_width=True, key=f"anim_plot_r{run_id}_{name}_line")
+        html = charts.animation_html(fig)
+        meta = charts.animation_meta(name, dim, "line", [0], {}, rep,
+                                     int(trajectory.seed), n_frames, lb, ub)
+        st.session_state["hba_animation_htmls"][(run_id, name, "line")] = html
+        st.session_state["hba_animation_meta"][(run_id, name, "line")] = meta
+        st.download_button(
+            "Animation HTML (standalone)", html,
+            file_name=f"{name}_animation_line.html", mime="text/html",
+            key=f"dl_anim_{name}_line",
+        )
+        return
+    kind = st.radio(
+        "Animation view", ["2D contour", "3D surface"], index=0, horizontal=True,
+        key=f"anim_view_r{run_id}_{name}",
+        help="Only the selected animation is generated on demand; grids stay static during playback.",
+    )
+    kind_key = "contour" if kind == "2D contour" else "surface"
+    if dim == 2:
+        ix, iy = 0, 1
+        fixed = np.zeros(dim)
+        fixed_values = {}
+        grid = _cached_grid(
+            (run_id, name, "full"),
+            lambda: charts.evaluate_landscape_2d(func, dim, lb, ub, 0, 1, np.zeros(dim)),
+        )
+        st.markdown("**Varied:** `x0` × `x1`. Full 2D objective landscape; markers show true positions.")
+    else:
+        coord_options = [f"x{i}" for i in range(dim)]
+        cx_label = st.selectbox(
+            "Animation X coordinate", coord_options, index=0,
+            key=f"anim_cx_r{run_id}_{name}")
+        cy_label = st.selectbox(
+            "Animation Y coordinate", coord_options, index=1,
+            key=f"anim_cy_r{run_id}_{name}")
+        ix, iy = int(cx_label[1:]), int(cy_label[1:])
+        if ix == iy:
+            st.error("Select two distinct coordinates for the animation slice.")
+            return
+        # Fixed slice through the recorded repetition's final best position.
+        fixed = np.asarray(results[name][rep - 1].best_position, dtype=float)
+        fixed_values = {k: float(fixed[k]) for k in range(dim) if k not in (ix, iy)}
+        grid = _cached_grid(
+            (run_id, name, ix, iy, rep),
+            lambda: charts.evaluate_landscape_2d(func, dim, lb, ub, ix, iy, fixed),
+        )
+        fixed_text = ", ".join(f"`x{k}={v:g}`" for k, v in fixed_values.items())
+        st.markdown(
+            f"**Varied:** `{cx_label}` × `{cy_label}` (coordinate projections). "
+            f"**Fixed** at recorded repetition {rep}'s final best position: {fixed_text}. "
+            "Surface marker heights are slice evaluations; hover text reports actual full-dimensional fitness.")
+    X, Y, Z = grid
+    try:
+        if kind_key == "contour":
+            fig = charts.build_animation_contour(
+                X, Y, Z, trajectory, ix, iy, name, rep, int(trajectory.seed),
+                lb, ub, frame_ms=frame_ms, projected=(dim > 2))
+        else:
+            fig = charts.build_animation_surface(
+                X, Y, Z, trajectory, ix, iy, fixed, func, name, rep,
+                int(trajectory.seed), lb, ub, frame_ms=frame_ms,
+                projected=(dim > 2))
+    except (ValueError, ImportError) as exc:
+        st.warning(str(exc))
+        return
+    st.plotly_chart(fig, use_container_width=True, key=f"anim_plot_r{run_id}_{name}_{kind_key}_{ix}_{iy}")
+    html = charts.animation_html(fig)
+    meta = charts.animation_meta(name, dim, kind_key, [ix, iy], fixed_values, rep,
+                                 int(trajectory.seed), n_frames, lb, ub)
+    akey = (run_id, name, kind_key) if dim == 2 else (run_id, name, kind_key, ix, iy)
+    st.session_state["hba_animation_htmls"][akey] = html
+    st.session_state["hba_animation_meta"][akey] = meta
+    st.download_button(
+        f"Animation HTML ({kind}, standalone)", html,
+        file_name=f"{name}_animation_{kind_key}.html", mime="text/html",
+        key=f"dl_anim_{name}_{kind_key}_{ix}_{iy}",
+    )
+
+
+def _zip_fingerprint(run_id, land_pngs, anim_htmls):
+    land_keys = sorted(
+        f"{p}/{k}" for (rid, p, *rest) in [kk for kk in land_pngs]
+        for k in [rest[-1]] if rid == run_id
+    ) if land_pngs else []
+    anim_keys = sorted("/".join(str(v) for v in kk[1:]) for kk in anim_htmls if kk and kk[0] == run_id)
+    return (run_id, tuple(land_keys), tuple(anim_keys))
+
+
 def _downloads_tab(results, settings, computed):
     st.caption("All files are generated in memory from the retained results; downloading never reruns optimization.")
     seed_extra = {"master_seed_auto": bool(st.session_state["hba_seed_auto"])}
@@ -441,48 +614,119 @@ def _downloads_tab(results, settings, computed):
         with col3:
             st.empty()
     st.markdown("**Combined archive**")
-    figures = {}
-    fig_comb = charts.plot_combined_mean_error(computed)
-    figures["combined_mean_error.png"] = charts.figure_png(fig_comb)
-    plt.close(fig_comb)
-    for name in results:
-        entry = computed[name]
-        fig_avg = charts.plot_average_best(entry["per_iteration"], f"{name}: average-best fitness")
-        figures[f"{name}_average_best.png"] = charts.figure_png(fig_avg)
-        plt.close(fig_avg)
-        fig_err = charts.plot_error(entry["per_iteration"], f"{name}: error", scale="symlog")
-        figures[f"{name}_error_symlog.png"] = charts.figure_png(fig_err)
-        plt.close(fig_err)
+    st.caption(
+        "Press **Prepare ZIP** to build the archive from the retained results; "
+        "downloading never reruns optimization. Preparing again is required "
+        "after the experiment or its landscapes/animations change."
+    )
     run_id = st.session_state["hba_run_id"]
     land_pngs = st.session_state["hba_landscape_pngs"]
     land_meta = st.session_state["hba_landscape_meta"]
-    extra_files = {}
-    land_entries = []
+    anim_htmls = st.session_state["hba_animation_htmls"]
+    anim_meta = st.session_state["hba_animation_meta"]
     if land_pngs:
         st.markdown("**Generated landscape images**")
     for (rid, prefix, kind), png in sorted(
             land_pngs.items(), key=lambda kv: (str(kv[0][1]), str(kv[0][2]))):
         if rid != run_id:
             continue
-        arcname = f"landscapes/{prefix}_landscape_{kind}.png"
-        figures[arcname] = png
-        meta = land_meta.get((rid, prefix, kind), {})
-        land_entries.append({"file": arcname, "png_key": f"{prefix}/{kind}", "slice": meta})
         st.download_button(
             f"Landscape PNG ({prefix}, {kind})", png,
             file_name=f"{prefix}_landscape_{kind}.png", mime="image/png",
             key=f"dl_landzip_{prefix}_{kind}",
         )
-    if land_entries:
+    run_anim_keys = [kk for kk in anim_htmls if kk and kk[0] == run_id]
+    if run_anim_keys:
+        st.markdown("**Generated animations**")
+        for kk in sorted(run_anim_keys, key=str):
+            html = anim_htmls[kk]
+            label = "/".join(str(v) for v in kk[1:])
+            st.download_button(
+                f"Animation HTML ({label}, standalone)", html,
+                file_name=f"{'_'.join(str(v) for v in kk[1:])}_animation.html",
+                mime="text/html", key=f"dl_animzip_{'_'.join(str(v) for v in kk[1:])}",
+            )
+    fingerprint = _zip_fingerprint(run_id, land_pngs, anim_htmls)
+    # Clear prepared archives whenever the experiment or included artifacts change.
+    if st.session_state["hba_zip_prepared_for"] != fingerprint:
+        st.session_state["hba_zip_bytes"] = None
+        st.session_state["hba_zip_error"] = None
+    if st.button("Prepare ZIP", key="prepare_zip"):
+        import inspect as _inspect
         import json as _json
+        import traceback as _tb
 
-        extra_files["landscapes/slices.json"] = _json.dumps(land_entries, indent=2)
-    st.download_button(
-        "Download all (ZIP)",
-        charts.build_zip(results, computed, settings, figures,
-                         extra=seed_extra, extra_files=extra_files),
-        file_name="hba_results.zip", mime="application/zip", key="dl_zip",
-    )
+        try:
+            figures = {}
+            fig_comb = charts.plot_combined_mean_error(computed)
+            figures["combined_mean_error.png"] = charts.figure_png(fig_comb)
+            plt.close(fig_comb)
+            for name in results:
+                entry = computed[name]
+                fig_avg = charts.plot_average_best(entry["per_iteration"], f"{name}: average-best fitness")
+                figures[f"{name}_average_best.png"] = charts.figure_png(fig_avg)
+                plt.close(fig_avg)
+                fig_err = charts.plot_error(entry["per_iteration"], f"{name}: error", scale="symlog")
+                figures[f"{name}_error_symlog.png"] = charts.figure_png(fig_err)
+                plt.close(fig_err)
+            for (rid, prefix, kind), png in sorted(
+                    land_pngs.items(), key=lambda kv: (str(kv[0][1]), str(kv[0][2]))):
+                if rid != run_id:
+                    continue
+                figures[f"landscapes/{prefix}_landscape_{kind}.png"] = png
+            land_entries = []
+            for (rid, prefix, kind) in sorted(
+                    [kk for kk in land_pngs if kk[0] == run_id], key=str):
+                land_entries.append({
+                    "file": f"landscapes/{prefix}_landscape_{kind}.png",
+                    "png_key": f"{prefix}/{kind}",
+                    "slice": land_meta.get((rid, prefix, kind), {}),
+                })
+            extra_files = {}
+            if land_entries:
+                extra_files["landscapes/slices.json"] = _json.dumps(land_entries, indent=2)
+            anim_entries = []
+            for kk in sorted(run_anim_keys, key=str):
+                arcname = f"animations/{'_'.join(str(v) for v in kk[1:])}_animation.html"
+                extra_files[arcname] = anim_htmls[kk]
+                anim_entries.append({"file": arcname, "anim_key": "/".join(str(v) for v in kk[1:]),
+                                     "animation": anim_meta.get(kk, {})})
+            if anim_entries:
+                extra_files["animations/metadata.json"] = _json.dumps(anim_entries, indent=2)
+            # Diagnose deployment drift: report the imported module path/signature
+            # alongside any failure instead of silently discarding optionals.
+            sig = str(_inspect.signature(charts.build_zip))
+            _ = (charts.__file__, sig)
+            data = charts.build_zip(results, computed, settings, figures,
+                                    extra=seed_extra, extra_files=extra_files)
+            st.session_state["hba_zip_bytes"] = data
+            st.session_state["hba_zip_prepared_for"] = fingerprint
+            st.session_state["hba_zip_error"] = None
+        except Exception as exc:  # contained within Downloads
+            st.session_state["hba_zip_bytes"] = None
+            st.session_state["hba_zip_error"] = str(exc)
+            import logging as _logging
+
+            _logging.exception("ZIP preparation failed")
+            st.error(
+                "Could not build the ZIP archive: "
+                f"{exc}. Completed results, plots, and individual downloads below "
+                "remain available. "
+                f"(charts={getattr(charts, '__file__', '?')}, "
+                f"build_zip{str(_inspect.signature(charts.build_zip))})"
+            )
+            with st.expander("Traceback (for deployment diagnosis)"):
+                st.code(_tb.format_exc())
+    if st.session_state["hba_zip_error"] and st.session_state["hba_zip_bytes"] is None:
+        st.warning(f"Last ZIP preparation failed: {st.session_state['hba_zip_error']}")
+    if st.session_state["hba_zip_bytes"] is not None:
+        st.download_button(
+            "Download prepared ZIP",
+            st.session_state["hba_zip_bytes"],
+            file_name="hba_results.zip", mime="application/zip", key="dl_zip",
+        )
+    else:
+        st.info("No prepared archive yet — press **Prepare ZIP** above.")
 
 
 def main():

@@ -375,3 +375,322 @@ def landscape_meta(function_name, dim, varied, fixed_values, rep, lb, ub,
         "bounds": [float(lb), float(ub)],
         "grid": f"{int(grid_n)}x{int(grid_n)}" if varied and len(varied) == 2 else str(int(grid_n)),
     }
+
+
+# ---------------------------------------------------------------------------
+# Moving-agent animations (Plotly frames; convergence charts stay static)
+# ---------------------------------------------------------------------------
+
+
+def _require_plotly():
+    try:
+        import plotly.graph_objects as go  # noqa: F401
+    except ImportError as exc:
+        raise ImportError(
+            "Plotly is required for agent animations. Install it with "
+            "`pip install plotly` (see requirements.txt)."
+        ) from exc
+    import plotly.graph_objects as go
+
+    return go
+
+
+def _anim_title(function_name, repetition, seed, iteration, best_fitness):
+    return (
+        f"{function_name} — rep {repetition}, seed {seed}, "
+        f"iteration {int(iteration)}, best fitness {float(best_fitness):.6g}"
+    )
+
+
+def _playback_controls(frame_names, frame_ms):
+    """Shared Play/Pause buttons and iteration slider for Plotly animations."""
+    frame_ms = int(frame_ms)
+    buttons = [
+        {
+            "label": "Play",
+            "method": "animate",
+            "args": [
+                None,
+                {
+                    "frame": {"duration": frame_ms, "redraw": True},
+                    "fromcurrent": True,
+                    "transition": {"duration": 0},
+                    "mode": "immediate",
+                },
+            ],
+        },
+        {
+            "label": "Pause",
+            "method": "animate",
+            "args": [
+                [None],
+                {
+                    "frame": {"duration": 0, "redraw": False},
+                    "mode": "immediate",
+                    "transition": {"duration": 0},
+                },
+            ],
+        },
+    ]
+    steps = [
+        {
+            "label": str(nm),
+            "method": "animate",
+            "args": [
+                [nm],
+                {
+                    "frame": {"duration": 0, "redraw": True},
+                    "mode": "immediate",
+                    "transition": {"duration": 0},
+                },
+            ],
+        }
+        for nm in frame_names
+    ]
+    sliders = [{"steps": steps, "currentvalue": {"prefix": "Iteration: "}}]
+    return buttons, sliders
+
+
+def build_animation_1d(xs, ys, trajectory, function_name, repetition, seed,
+                       lb, ub, frame_ms=300):
+    """Animate agents on the 1D objective-versus-coordinate curve."""
+    go = _require_plotly()
+    xs = np.asarray(xs, dtype=float)
+    ys = np.asarray(ys, dtype=float)
+    pops = np.asarray(trajectory.populations, dtype=float)
+    bests = np.asarray(trajectory.best_positions, dtype=float)
+    best_fit = np.asarray(trajectory.best_fitness, dtype=float)
+    frame_iters = [int(v) for v in np.asarray(trajectory.frame_iterations).tolist()]
+    if pops.ndim != 3 or pops.shape[2] != 1:
+        raise ValueError("1D animation needs populations with shape (frames, agents, 1).")
+    finite = ys[np.isfinite(ys)]
+    if finite.size == 0:
+        raise ValueError("No finite objective values on this landscape grid (line).")
+    ylo, yhi = float(finite.min()), float(finite.max())
+    if ylo == yhi:
+        ylo, yhi = ylo - 1.0, yhi + 1.0
+    pad = 0.05 * (yhi - ylo)
+    ylo, yhi = ylo - pad, yhi + pad
+    mask = np.isfinite(ys)
+    it0 = frame_iters[0]
+    agents_x = pops[0, :, 0]
+    agents_y = np.asarray(trajectory.population_fitness, dtype=float)[0]
+    best_x = float(bests[0, 0])
+    best_y = float(best_fit[0])
+    title0 = _anim_title(function_name, repetition, seed, it0, best_y)
+    fig = go.Figure(
+        data=[
+            go.Scatter(x=xs[mask].tolist(), y=ys[mask].tolist(), mode="lines",
+                       name="Objective f(x0)"),
+            go.Scatter(x=agents_x.tolist(), y=agents_y.tolist(), mode="markers",
+                       name="Agents", marker={"size": 7}),
+            go.Scatter(x=[best_x], y=[best_y], mode="markers",
+                       name="Best", marker={"size": 12, "symbol": "star"}),
+        ],
+        layout={
+            "title": title0,
+            "xaxis": {"range": [float(lb), float(ub)], "title": "x0"},
+            "yaxis": {"range": [ylo, yhi], "title": "Objective fitness"},
+        },
+        frames=[
+            go.Frame(
+                name=str(it),
+                data=[
+                    go.Scatter(x=pops[k, :, 0].tolist(),
+                               y=np.asarray(trajectory.population_fitness, dtype=float)[k].tolist()),
+                    go.Scatter(x=[float(bests[k, 0])], y=[float(best_fit[k])]),
+                ],
+                layout={"title": _anim_title(function_name, repetition, seed, it, float(best_fit[k]))},
+            )
+            for k, it in enumerate(frame_iters)
+        ],
+    )
+    buttons, sliders = _playback_controls([str(v) for v in frame_iters], frame_ms)
+    fig.update_layout(updatemenus=[{"type": "buttons", "buttons": buttons}], sliders=sliders)
+    return fig
+
+
+def build_animation_contour(X, Y, Z, trajectory, ix, iy, function_name,
+                            repetition, seed, lb, ub, frame_ms=300,
+                            projected=True):
+    """Animate agent projections on a fixed contour slice."""
+    go = _require_plotly()
+    X = np.asarray(X, dtype=float)
+    Y = np.asarray(Y, dtype=float)
+    Z = np.asarray(Z, dtype=float)
+    pops = np.asarray(trajectory.populations, dtype=float)
+    bests = np.asarray(trajectory.best_positions, dtype=float)
+    best_fit = np.asarray(trajectory.best_fitness, dtype=float)
+    pop_fit = np.asarray(trajectory.population_fitness, dtype=float)
+    frame_iters = [int(v) for v in np.asarray(trajectory.frame_iterations).tolist()]
+    finite = Z[np.isfinite(Z)]
+    if finite.size == 0:
+        raise ValueError("No finite objective values on this landscape grid (contour).")
+    zmin, zmax = float(finite.min()), float(finite.max())
+    agent_label = (f"Agents (x{ix}×x{iy} projection)" if projected else "Agents")
+    best_label = (f"Best (x{ix}×x{iy} projection)" if projected else "Best")
+    it0 = frame_iters[0]
+    ax, ay = pops[0, :, ix].tolist(), pops[0, :, iy].tolist()
+    hover0 = [f"agent {i}<br>actual fitness {float(pop_fit[0, i]):.6g}" for i in range(len(ax))]
+    fig = go.Figure(
+        data=[
+            go.Contour(x=X[0].tolist(), y=Y[:, 0].tolist(), z=Z.tolist(),
+                       colorscale="Viridis", zmin=zmin, zmax=zmax,
+                       name="Objective slice", showscale=True,
+                       colorbar={"title": "Objective fitness (slice)"}),
+            go.Scatter(x=ax, y=ay, mode="markers", name=agent_label,
+                       marker={"size": 7}, text=hover0, hoverinfo="text"),
+            go.Scatter(x=[float(bests[0, ix])], y=[float(bests[0, iy])],
+                       mode="markers", name=best_label,
+                       marker={"size": 12, "symbol": "star"},
+                       text=[f"best<br>actual fitness {float(best_fit[0]):.6g}"],
+                       hoverinfo="text"),
+        ],
+        layout={
+            "title": _anim_title(function_name, repetition, seed, it0, float(best_fit[0])),
+            "xaxis": {"range": [float(lb), float(ub)], "title": f"x{ix}"},
+            "yaxis": {"range": [float(lb), float(ub)], "title": f"x{iy}"},
+        },
+        frames=[
+            go.Frame(
+                name=str(it),
+                data=[
+                    go.Scatter(
+                        x=pops[k, :, ix].tolist(), y=pops[k, :, iy].tolist(),
+                        text=[f"agent {i}<br>actual fitness {float(pop_fit[k, i]):.6g}"
+                              for i in range(pops.shape[1])],
+                    ),
+                    go.Scatter(
+                        x=[float(bests[k, ix])], y=[float(bests[k, iy])],
+                        text=[f"best<br>actual fitness {float(best_fit[k]):.6g}"],
+                    ),
+                ],
+                layout={"title": _anim_title(function_name, repetition, seed, it, float(best_fit[k]))},
+            )
+            for k, it in enumerate(frame_iters)
+        ],
+    )
+    buttons, sliders = _playback_controls([str(v) for v in frame_iters], frame_ms)
+    fig.update_layout(updatemenus=[{"type": "buttons", "buttons": buttons}], sliders=sliders)
+    return fig
+
+
+def build_animation_surface(X, Y, Z, trajectory, ix, iy, fixed, func,
+                            function_name, repetition, seed, lb, ub,
+                            frame_ms=300, projected=True):
+    """Animate agent projections above a fixed 3D surface slice.
+
+    Marker heights are the slice evaluation at the projected coordinates with
+    the remaining coordinates fixed; hover text reports the actual
+    full-dimensional fitness.
+    """
+    go = _require_plotly()
+    X = np.asarray(X, dtype=float)
+    Y = np.asarray(Y, dtype=float)
+    Z = np.asarray(Z, dtype=float)
+    pops = np.asarray(trajectory.populations, dtype=float)
+    bests = np.asarray(trajectory.best_positions, dtype=float)
+    best_fit = np.asarray(trajectory.best_fitness, dtype=float)
+    pop_fit = np.asarray(trajectory.population_fitness, dtype=float)
+    frame_iters = [int(v) for v in np.asarray(trajectory.frame_iterations).tolist()]
+    fixed = np.asarray(fixed, dtype=float)
+    finite = Z[np.isfinite(Z)]
+    if finite.size == 0:
+        raise ValueError("No finite objective values on this landscape grid (surface).")
+
+    def _slice_height(vec2x, vec2y):
+        vec = fixed.copy()
+        vec[ix] = float(vec2x)
+        vec[iy] = float(vec2y)
+        try:
+            value = float(func(vec))
+        except Exception:
+            return float("nan")
+        return value if np.isfinite(value) else float("nan")
+
+    zmin, zmax = float(finite.min()), float(finite.max())
+    if zmin == zmax:
+        zmin, zmax = zmin - 1.0, zmax + 1.0
+    n_agents = pops.shape[1]
+    ax0 = pops[0, :, ix].tolist()
+    ay0 = pops[0, :, iy].tolist()
+    az0 = [_slice_height(x, y) for x, y in zip(ax0, ay0)]
+    bx0, by0 = float(bests[0, ix]), float(bests[0, iy])
+    bz0 = _slice_height(bx0, by0)
+    agent_label = (f"Agents (x{ix}×x{iy} projection)" if projected else "Agents")
+    best_label = (f"Best (x{ix}×x{iy} projection)" if projected else "Best")
+    it0 = frame_iters[0]
+    fig = go.Figure(
+        data=[
+            go.Surface(x=X.tolist(), y=Y.tolist(), z=Z.tolist(),
+                       colorscale="Viridis", cmin=zmin, cmax=zmax,
+                       name="Objective slice",
+                       colorbar={"title": "Objective fitness (slice)"}),
+            go.Scatter3d(x=ax0, y=ay0, z=az0, mode="markers", name=agent_label,
+                         marker={"size": 4},
+                         text=[f"agent {i}<br>slice height {float(az0[i]):.6g}<br>"
+                               f"actual fitness {float(pop_fit[0, i]):.6g}" for i in range(n_agents)],
+                         hoverinfo="text"),
+            go.Scatter3d(x=[bx0], y=[by0], z=[bz0], mode="markers", name=best_label,
+                         marker={"size": 7, "symbol": "diamond"},
+                         text=[f"best<br>slice height {float(bz0):.6g}<br>"
+                               f"actual fitness {float(best_fit[0]):.6g}"],
+                         hoverinfo="text"),
+        ],
+        layout={
+            "title": _anim_title(function_name, repetition, seed, it0, float(best_fit[0])),
+            "scene": {
+                "xaxis": {"range": [float(lb), float(ub)], "title": f"x{ix}"},
+                "yaxis": {"range": [float(lb), float(ub)], "title": f"x{iy}"},
+                "zaxis": {"range": [zmin, zmax], "title": "Objective fitness (slice height)"},
+            },
+        },
+        frames=[
+            go.Frame(
+                name=str(it),
+                data=[
+                    go.Scatter3d(
+                        x=pops[k, :, ix].tolist(), y=pops[k, :, iy].tolist(),
+                        z=[_slice_height(x, y) for x, y in
+                           zip(pops[k, :, ix].tolist(), pops[k, :, iy].tolist())],
+                        text=[f"agent {i}<br>actual fitness {float(pop_fit[k, i]):.6g}"
+                              for i in range(n_agents)],
+                    ),
+                    go.Scatter3d(
+                        x=[float(bests[k, ix])], y=[float(bests[k, iy])],
+                        z=[_slice_height(float(bests[k, ix]), float(bests[k, iy]))],
+                        text=[f"best<br>actual fitness {float(best_fit[k]):.6g}"],
+                    ),
+                ],
+                layout={"title": _anim_title(function_name, repetition, seed, it, float(best_fit[k]))},
+            )
+            for k, it in enumerate(frame_iters)
+        ],
+    )
+    buttons, sliders = _playback_controls([str(v) for v in frame_iters], frame_ms)
+    fig.update_layout(updatemenus=[{"type": "buttons", "buttons": buttons}], sliders=sliders)
+    return fig
+
+
+def animation_html(fig):
+    """Standalone interactive HTML for one animation figure."""
+    return fig.to_html(full_html=True, include_plotlyjs="cdn")
+
+
+def animation_meta(function_name, dim, kind, varied, fixed_values, rep, seed,
+                   frames, lb, ub, grid_n=LANDSCAPE_GRID):
+    """Metadata describing one generated agent animation."""
+    return {
+        "function": function_name,
+        "dimensions": int(dim),
+        "kind": kind,
+        "varied_coordinates": [f"x{i}" for i in varied],
+        "fixed_coordinates": {f"x{k}": float(v) for k, v in fixed_values.items()},
+        "record_repetition": int(rep),
+        "record_seed": int(seed),
+        "frames": int(frames),
+        "bounds": [float(lb), float(ub)],
+        "grid": f"{int(grid_n)}x{int(grid_n)}" if len(varied) == 2 else str(int(grid_n)),
+        "note": ("Markers are coordinate projections; surface heights are slice "
+                 "evaluations while hover text reports actual full-dimensional fitness."),
+    }
