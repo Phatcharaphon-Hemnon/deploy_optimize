@@ -12,9 +12,10 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-Defaults: all six functions, 50 agents, 3 dimensions, 200 iterations,
-30 repetitions, shared bounds `[-5, 5]`, master seed `42`. All sizes are
-configurable in the form (positive integers within the stated caps).
+Defaults: **All functions** (or pick one of the six), 50 agents, 3 dimensions,
+200 iterations, 30 repetitions, shared bounds `[-5, 5]`, and a blank
+**Master seed (optional)**. All sizes are configurable in the form (positive
+integers within the stated caps).
 Counts must be positive; dimensions are configurable with Rosenbrock requiring
 at least 2. Bounds must be finite and contain a known minimizer for every
 selected function: coordinate 1 for Rosenbrock and 0 for the others. Very large
@@ -22,8 +23,13 @@ experiments require correspondingly more compute and memory. Objective or update
 overflow produces an error rather than invalid data.
 
 The form's **Run experiment** button runs the optimization with a progress
-indicator. Completed results and their settings stay in session state, so
-changing chart options or downloading files never reruns optimization.
+indicator. A blank master seed is resolved to a random valid integer only when
+the button is submitted; an explicit seed (including `0`) stays deterministic.
+The resolved seed is shown with the completed results and retained in settings
+and downloads: re-entering it reproduces the run in the same software
+environment. Completed results and their settings stay in session state, so
+changing chart, landscape, or download options never reruns optimization and
+never generates new seeds.
 Repetitions use independent derived seeds (`master + repetition index`); the
 same seed schedule is used across functions, so repeating the settings and
 master seed reproduces numerical results in the same software environment.
@@ -36,11 +42,21 @@ Tabs:
 - **Function details**: average-best chart (mean and median best-so-far fitness
   with a mean ± one sample-standard-deviation band), error chart
   (`abs(best_fitness - known_optimum)` with mean, median, and band) on linear
-  or symmetric-log axes that preserve zero, per-repetition best positions, and
-  the exact local formula.
+  or symmetric-log axes that preserve zero, per-repetition best positions, the
+  exact local formula, and an optional objective-landscape view (off by
+  default): **2D contour**, **3D surface**, or **Both**. Landscapes evaluate the
+  selected function on a fixed `100 × 100` grid within the experiment's bounds —
+  the full landscape for 2D experiments, a one-dimensional line plot for 1D
+  experiments, and a two-coordinate slice for higher dimensions (remaining
+  coordinates held at a selected repetition's best position, default repetition
+  1). Surface height is objective fitness, not a third optimization coordinate.
+  Constant landscapes are annotated; grids with no finite values show a message
+  instead of a plot. Generated landscape images have individual PNG downloads
+  and are included in the ZIP with slice metadata.
 - **Downloads**: per-function statistics/histories/best-position CSVs,
-  settings/seeds JSON, PNG charts, and a ZIP archive. Files are generated in
-  memory per session; nothing is written to disk.
+  settings/seeds JSON, PNG charts, generated landscape images, and a ZIP
+  archive. Files are generated in memory per session; nothing is written to
+  disk.
 
 With one repetition, variability bands are omitted and standard deviation is
 shown as unavailable.
@@ -97,7 +113,9 @@ results, settings = run_experiment(
 
 `hba_experiment` imports objectives directly from `_tool.py`. It never imports
 `main.py`, which executes an experiment on import. `charts.py` provides
-statistics, Matplotlib figures, and in-memory CSV/JSON/PNG/ZIP exports.
+statistics, Matplotlib convergence figures, dimension-aware landscape
+evaluation/plotting helpers, and in-memory CSV/JSON/PNG/ZIP exports (no new
+plotting dependencies).
 
 ## Existing scripts (unchanged)
 

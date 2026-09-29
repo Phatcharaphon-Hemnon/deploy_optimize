@@ -1,8 +1,8 @@
 {
   "meta": {
     "version": 1,
-    "nodeCount": 15,
-    "edgeCount": 23,
+    "nodeCount": 55,
+    "edgeCount": 109,
     "languages": [
       "python"
     ],
@@ -129,6 +129,444 @@
       "crux": null
     },
     {
+      "id": "charts.py",
+      "name": "charts.py",
+      "kind": "file",
+      "path": "charts.py",
+      "span": "L1-L231",
+      "signature": null,
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "36dffd64556c7762c033fb69adfe2782158dfdfa0cbbc071d6dd6d66ef9a9148",
+      "chars": 8457,
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#_as_histories",
+      "name": "_as_histories",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L27-L28",
+      "signature": "def _as_histories(runs)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "9f7fd0abe6b388dcafe74d2461debe496afd1f0c0d31f9e40f3f68b9da4fe105",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#_band",
+      "name": "_band",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L91-L94",
+      "signature": "def _band(ax, xs, mean, std, **kwargs)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "d5e5bde34953a0dfe22ec8a8cefed4c4f54360eb54d74e84de61007e9b2c1333",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#_csv_string",
+      "name": "_csv_string",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L154-L159",
+      "signature": "def _csv_string(header, rows)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "2a29c2956c88b3eb52e31d8cb9d02ded52452fbb15b7677f2f19e73ae7cd9362",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#build_zip",
+      "name": "build_zip",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L218-L230",
+      "signature": "def build_zip(results, computed, settings, figures)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "509cbf4e1fb23f8e1e0cd88527bd9bc6bc1e6237440e3d9549d3f5936a1c7bbf",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#compute_all",
+      "name": "compute_all",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L78-L88",
+      "signature": "def compute_all(results, optimum=0.0)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "d8f1345b30117692d559402b7d716adf009664be9c22371d59802ad6c1c61ad2",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#figure_png",
+      "name": "figure_png",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L212-L215",
+      "signature": "def figure_png(fig)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "573c8ec8c9b949f50caa99539f58f128d3958ecde69776fc591a0e83d6016c42",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#final_summary",
+      "name": "final_summary",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L64-L75",
+      "signature": "def final_summary(histories, optimum=0.0)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "f21c23dc94ac958716d435b420bd9f9dd50eb0527dfc050caf9879966b7b2baa",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#histories_csv",
+      "name": "histories_csv",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L186-L191",
+      "signature": "def histories_csv(name, runs, optimum=0.0)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "7854eaf4081a7dfca2247d6a9c8f21275cf0a7560146a89d7ef63cc4116e6167",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#per_iteration_stats",
+      "name": "per_iteration_stats",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L31-L61",
+      "signature": "def per_iteration_stats(histories, optimum=0.0)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "530697b1d3cf20ac2be43346c61b743a06c26c399d90cabd90c13987f00ac4c1",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#plot_average_best",
+      "name": "plot_average_best",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L97-L111",
+      "signature": "def plot_average_best(per_iteration, title, xlabel=\"Iteration\")",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "187dca3668fc1f3097ea3d21fa3a4c24d3add8e493d556e1971d0b14352bf4cb",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#plot_combined_mean_error",
+      "name": "plot_combined_mean_error",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L135-L146",
+      "signature": "def plot_combined_mean_error(computed, title=\"Mean error across functions\")",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "9004176f5cfd6a843728151e9557311ce801be421c27198e5ec07cb81449cb9a",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#plot_error",
+      "name": "plot_error",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L114-L132",
+      "signature": "def plot_error(per_iteration, title, scale=\"symlog\", xlabel=\"Iteration\")",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "9e36485a2e24975e2dcbe39a22ddbc4150025befe9391122a2bd55e99fbae7ae",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#runs_csv",
+      "name": "runs_csv",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L194-L202",
+      "signature": "def runs_csv(name, runs, optimum=0.0)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "eb0a71903c875695f266bbc8c315e7e3fe2e68950c368922be3e7823317a87f4",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#settings_json",
+      "name": "settings_json",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L205-L209",
+      "signature": "def settings_json(settings, extra=None)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "f1fe6d04de5e4bbb969a5a31256f6663c8aaf7897543568b4fd632b2ec1ca28d",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "charts.py#statistics_csv",
+      "name": "statistics_csv",
+      "kind": "function",
+      "path": "charts.py",
+      "span": "L162-L183",
+      "signature": "def statistics_csv(name, per_iteration)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "3adad655b28d43e7abbcac72493205e7e58d5bfe51800e4319fa5f2a06df6459",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py",
+      "name": "hba_experiment.py",
+      "kind": "file",
+      "path": "hba_experiment.py",
+      "span": "L1-L380",
+      "signature": null,
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "f2a69cacbbe6f5ffe2e6a7a97b164f5ffa864b2e7a5ecefc40ddc42b38075197",
+      "chars": 15430,
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#_check_finite_vector",
+      "name": "_check_finite_vector",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L166-L172",
+      "signature": "def _check_finite_vector(vec, context)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "aac94830a51ec1a9ace9399d80e944bb9981b97297f78be4facdeb2d907bf9fa",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#_evaluate",
+      "name": "_evaluate",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L175-L182",
+      "signature": "def _evaluate(func, position)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "45799242046c44b71594750d7fe5c87a0b7e38ce60403f709629e82fb36f2e8e",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#_require_positive_int",
+      "name": "_require_positive_int",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L103-L111",
+      "signature": "def _require_positive_int(name, value, limit=None)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "cdb7293d94832945ee7d4b8fe72dc900b92c95146d4c86b55e0ea29e3b76695c",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#derive_seeds",
+      "name": "derive_seeds",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L185-L194",
+      "signature": "def derive_seeds(master_seed, repetitions)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "b3e3740d78fed42a12c1f146c3336e4409347970e90ce95f2b213875f91bc2a3",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#ExperimentSettings",
+      "name": "ExperimentSettings",
+      "kind": "class",
+      "path": "hba_experiment.py",
+      "span": "L231-L254",
+      "signature": "class ExperimentSettings",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "aa8cc8e0553c28dbe8006f7e9b6dea89f4253ea794dc7d3342f5ce99971c5247",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#ExperimentSettings.to_dict",
+      "name": "to_dict",
+      "kind": "method",
+      "path": "hba_experiment.py",
+      "span": "L242-L254",
+      "signature": "def to_dict(self)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "fb675a6e84c06bdc3b212b0ac068eb295035dc4d5f1caa87a788e7b3ac069711",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null,
+      "owner": "ExperimentSettings"
+    },
+    {
+      "id": "hba_experiment.py#optimize",
+      "name": "optimize",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L262-L341",
+      "signature": "def optimize(function_name, dimensions, agents, iterations, lb, ub, seed)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "68c6440c1f93a8bbe2e156f0f2b448129226c24a71268a8fbf09c0de280766ff",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#run_experiment",
+      "name": "run_experiment",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L344-L379",
+      "signature": "def run_experiment(function_names, agents=DEFAULTS[\"agents\"], dimensions=DEFAULTS[\"dimensions\"], iterations=DEFAULTS[\"iterations\"], repetitions=DEFAULTS[\"repetitions\"], lb=DEFAULTS[\"lb\"], ub=DEFAULTS[\"ub\"], seed=DEFAULTS[\"seed\"], progress_callback=None)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "cf0caea2cc37f6ca68860b90cb48f3b604079c80bbd74d7a094739c7f0531f5a",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#RunResult",
+      "name": "RunResult",
+      "kind": "class",
+      "path": "hba_experiment.py",
+      "span": "L203-L227",
+      "signature": "class RunResult",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "30af72d1c8665e75e509a25b9712e35e884f34f89bdbc14181a71db36578b8ab",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#RunResult.__post_init__",
+      "name": "__post_init__",
+      "kind": "method",
+      "path": "hba_experiment.py",
+      "span": "L213-L227",
+      "signature": "def __post_init__(self)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "71b8338a9b36bb1cd7a8a76d1c6acd9ebeb98ad0d7cc75ef5b6a0effbd306263",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null,
+      "owner": "RunResult"
+    },
+    {
+      "id": "hba_experiment.py#validate_bounds",
+      "name": "validate_bounds",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L126-L144",
+      "signature": "def validate_bounds(lb, ub, functions)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "a0ce76e948ecd1d9a8dc3046db6ca7ef061a7df99f766cdf1952cd0da5f4c43e",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#validate_counts",
+      "name": "validate_counts",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L114-L123",
+      "signature": "def validate_counts(agents, dimensions, iterations, repetitions, functions=None)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "43159456fc35c108c50dd9b2060e0353ad4a7f66a669eb04fd8700d840f659f4",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#validate_functions",
+      "name": "validate_functions",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L156-L163",
+      "signature": "def validate_functions(names)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "46dcff5ad25dfa74a7330a20cdb4b67180c406aca0e21a1170fe48b507c98683",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "hba_experiment.py#validate_seed",
+      "name": "validate_seed",
+      "kind": "function",
+      "path": "hba_experiment.py",
+      "span": "L147-L153",
+      "signature": "def validate_seed(seed)",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "87a23963e5a65b1e1fcb93c1d8d1d19c5069df1995e419b83c77ce38826f1a55",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
       "id": "main.py",
       "name": "main.py",
       "kind": "file",
@@ -230,6 +668,133 @@
       "summary_state": "pending",
       "summary": null,
       "crux": null
+    },
+    {
+      "id": "streamlit_app.py",
+      "name": "streamlit_app.py",
+      "kind": "file",
+      "path": "streamlit_app.py",
+      "span": "L1-L326",
+      "signature": null,
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "d8146b7ed975a02056deb1d388df89aef5d56b5b938a3e9d3b39971f1f96fbb3",
+      "chars": 12913,
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "streamlit_app.py#_comparison_tab",
+      "name": "_comparison_tab",
+      "kind": "function",
+      "path": "streamlit_app.py",
+      "span": "L155-L183",
+      "signature": "def _comparison_tab(results, settings, computed)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "2ce19495215c0f73bf538dffe184fe51716386c0b499ed8bc03332cdc4676f65",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "streamlit_app.py#_downloads_tab",
+      "name": "_downloads_tab",
+      "kind": "function",
+      "path": "streamlit_app.py",
+      "span": "L224-L296",
+      "signature": "def _downloads_tab(results, settings, computed)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "33cb7f470c38e2888fb280f290090448734f2848cd38e1f562b8d8d7a1de625f",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "streamlit_app.py#_execute",
+      "name": "_execute",
+      "kind": "function",
+      "path": "streamlit_app.py",
+      "span": "L94-L130",
+      "signature": "def _execute(cfg)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "1f3c88e44948310f5329270478ec00154f7746b46ccfa9d846645d052336614b",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "streamlit_app.py#_function_tab",
+      "name": "_function_tab",
+      "kind": "function",
+      "path": "streamlit_app.py",
+      "span": "L186-L221",
+      "signature": "def _function_tab(results, settings, computed)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "aa82670ae103a450486a6cc06b918b57aacc94e86ac6d6a947f8809288edca62",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "streamlit_app.py#_init_state",
+      "name": "_init_state",
+      "kind": "function",
+      "path": "streamlit_app.py",
+      "span": "L43-L46",
+      "signature": "def _init_state()",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "d1c823a69105a11583f3eeffd77a694ebbdb05c9dcce9b3850071d65c6cfb470",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "streamlit_app.py#_run_form",
+      "name": "_run_form",
+      "kind": "function",
+      "path": "streamlit_app.py",
+      "span": "L49-L91",
+      "signature": "def _run_form()",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "49b44ef6b0d359de93d84c18fec913d4614bb1a5fc85e04c33d1aa1575bdd301",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "streamlit_app.py#_summary_rows",
+      "name": "_summary_rows",
+      "kind": "function",
+      "path": "streamlit_app.py",
+      "span": "L133-L152",
+      "signature": "def _summary_rows(computed)",
+      "exported": false,
+      "origin": "ast",
+      "body_hash": "b03a33e7b967d6de693fa52dfda41f57b6f5e0ae47b67c4c73c96f04440bb98a",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
+    },
+    {
+      "id": "streamlit_app.py#main",
+      "name": "main",
+      "kind": "function",
+      "path": "streamlit_app.py",
+      "span": "L299-L322",
+      "signature": "def main()",
+      "exported": true,
+      "origin": "ast",
+      "body_hash": "d1e59db31fb21d499477138e31f14686e8c17f3f5b5360938fa9e1cf16e6591b",
+      "summary_state": "pending",
+      "summary": null,
+      "crux": null
     }
   ],
   "edges": [
@@ -273,6 +838,414 @@
       "source": "_tool.py",
       "target": "_tool.py#schwefel",
       "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#_as_histories",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#_band",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#_csv_string",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#build_zip",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#compute_all",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#figure_png",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#final_summary",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#histories_csv",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#per_iteration_stats",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#plot_average_best",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#plot_combined_mean_error",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#plot_error",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#runs_csv",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#settings_json",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "charts.py#statistics_csv",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "csv",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "io",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "json",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "matplotlib",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py",
+      "target": "zipfile",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#build_zip",
+      "target": "charts.py#histories_csv",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#build_zip",
+      "target": "charts.py#runs_csv",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#build_zip",
+      "target": "charts.py#settings_json",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#build_zip",
+      "target": "charts.py#statistics_csv",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#compute_all",
+      "target": "charts.py#_as_histories",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#compute_all",
+      "target": "charts.py#final_summary",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#compute_all",
+      "target": "charts.py#per_iteration_stats",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#final_summary",
+      "target": "charts.py#per_iteration_stats",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#histories_csv",
+      "target": "charts.py#_csv_string",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#plot_average_best",
+      "target": "charts.py#_band",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#plot_error",
+      "target": "charts.py#_band",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#runs_csv",
+      "target": "charts.py#_csv_string",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "charts.py#statistics_csv",
+      "target": "charts.py#_csv_string",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#_check_finite_vector",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#_evaluate",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#_require_positive_int",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#derive_seeds",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#ExperimentSettings",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#optimize",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#run_experiment",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#RunResult",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#validate_bounds",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#validate_counts",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#validate_functions",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "hba_experiment.py#validate_seed",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "_tool",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "dataclasses",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py",
+      "target": "math",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#derive_seeds",
+      "target": "hba_experiment.py#_require_positive_int",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#derive_seeds",
+      "target": "hba_experiment.py#validate_seed",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#ExperimentSettings",
+      "target": "hba_experiment.py#ExperimentSettings.to_dict",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#optimize",
+      "target": "_tool.py#_DistanceBetween",
+      "relation": "calls",
+      "confidence": "inferred"
+    },
+    {
+      "source": "hba_experiment.py#optimize",
+      "target": "hba_experiment.py#_check_finite_vector",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#optimize",
+      "target": "hba_experiment.py#_evaluate",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#optimize",
+      "target": "hba_experiment.py#RunResult",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#optimize",
+      "target": "hba_experiment.py#validate_bounds",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#optimize",
+      "target": "hba_experiment.py#validate_counts",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#optimize",
+      "target": "hba_experiment.py#validate_functions",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#optimize",
+      "target": "hba_experiment.py#validate_seed",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#run_experiment",
+      "target": "hba_experiment.py#derive_seeds",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#run_experiment",
+      "target": "hba_experiment.py#ExperimentSettings",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#run_experiment",
+      "target": "hba_experiment.py#optimize",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#run_experiment",
+      "target": "hba_experiment.py#validate_bounds",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#run_experiment",
+      "target": "hba_experiment.py#validate_counts",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#run_experiment",
+      "target": "hba_experiment.py#validate_functions",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#run_experiment",
+      "target": "hba_experiment.py#validate_seed",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#RunResult",
+      "target": "hba_experiment.py#RunResult.__post_init__",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "hba_experiment.py#validate_counts",
+      "target": "hba_experiment.py#_require_positive_int",
+      "relation": "calls",
       "confidence": "extracted"
     },
     {
@@ -369,6 +1342,114 @@
       "source": "plot.py#Monitor",
       "target": "plot.py#Monitor.save_frame",
       "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#main",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#_comparison_tab",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#_downloads_tab",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#_execute",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#_function_tab",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#_init_state",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#_run_form",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#_summary_rows",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "streamlit_app.py#main",
+      "relation": "contains",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "charts",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py",
+      "target": "hba_experiment",
+      "relation": "imports",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py#_comparison_tab",
+      "target": "streamlit_app.py#_summary_rows",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py#main",
+      "target": "streamlit_app.py#_comparison_tab",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py#main",
+      "target": "streamlit_app.py#_downloads_tab",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py#main",
+      "target": "streamlit_app.py#_execute",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py#main",
+      "target": "streamlit_app.py#_function_tab",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py#main",
+      "target": "streamlit_app.py#_init_state",
+      "relation": "calls",
+      "confidence": "extracted"
+    },
+    {
+      "source": "streamlit_app.py#main",
+      "target": "streamlit_app.py#_run_form",
+      "relation": "calls",
       "confidence": "extracted"
     }
   ]

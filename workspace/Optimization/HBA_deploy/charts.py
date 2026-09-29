@@ -215,11 +215,16 @@ def figure_png(fig):
     return buf.getvalue()
 
 
-def build_zip(results, computed, settings, figures):
-    """Build a ZIP archive in memory with all CSV/JSON/PNG artifacts."""
+def build_zip(results, computed, settings, figures, extra=None, extra_files=None):
+    """Build a ZIP archive in memory with all CSV/JSON/PNG artifacts.
+
+    ``extra`` is merged into ``settings.json`` (e.g. dashboard provenance)
+    and ``extra_files`` maps additional archive names to bytes/str content
+    (e.g. landscape slice metadata).
+    """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr("settings.json", settings_json(settings))
+        zf.writestr("settings.json", settings_json(settings, extra))
         for name, runs in results.items():
             entry = computed[name]
             zf.writestr(f"{name}/statistics.csv", statistics_csv(name, entry["per_iteration"]))
@@ -227,4 +232,146 @@ def build_zip(results, computed, settings, figures):
             zf.writestr(f"{name}/runs.csv", runs_csv(name, runs, 0.0))
         for arcname, data in figures.items():
             zf.writestr(arcname, data)
+        for arcname, data in (extra_files or {}).items():
+            zf.writestr(arcname, data)
     return buf.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Objective landscapes (dimension-aware slices for the dashboard)
+# ---------------------------------------------------------------------------
+
+#: Fixed grid resolution for landscape evaluation.
+LANDSCAPE_GRID = 100
+
+
+def evaluate_landscape_1d(func, lb, ub, n=LANDSCAPE_GRID):
+    """Evaluate ``func`` on ``n`` points spanning ``[lb, ub]``.
+
+    Returns ``(xs, ys)``; non-finite evaluations become NaN.
+    """
+    n = int(n)
+    xs = np.linspace(float(lb), float(ub), n)
+    ys = np.empty(n, dtype=float)
+    for k, x in enumerate(xs):
+        try:
+            value = float(func(np.array([x], dtype=float)))
+        except Exception:
+            value = float("nan")
+        ys[k] = value if np.isfinite(value) else float("nan")
+    return xs, ys
+
+
+def evaluate_landscape_2d(func, dim, lb, ub, ix, iy, fixed, n=LANDSCAPE_GRID):
+    """Evaluate ``func`` on an ``n x n`` grid over coordinates ``ix``, ``iy``.
+
+    Remaining coordinates are held at ``fixed`` (a length-``dim`` vector).
+    Returns ``(X, Y, Z)``; non-finite evaluations become NaN.
+    """
+    dim, ix, iy, n = int(dim), int(ix), int(iy), int(n)
+    if not (0 <= ix < dim and 0 <= iy < dim):
+        raise ValueError(f"Coordinate indices out of range for {dim} dimensions.")
+    if ix == iy:
+        raise ValueError("Landscape needs two distinct coordinates.")
+    fixed = np.asarray(fixed, dtype=float)
+    if fixed.shape != (dim,):
+        raise ValueError("Fixed-position vector must match dimensions.")
+    xs = np.linspace(float(lb), float(ub), n)
+    ys = np.linspace(float(lb), float(ub), n)
+    X, Y = np.meshgrid(xs, ys)
+    Z = np.empty_like(X, dtype=float)
+    for j in range(n):
+        for i in range(n):
+            vec = fixed.copy()
+            vec[ix] = X[j, i]
+            vec[iy] = Y[j, i]
+            try:
+                value = float(func(vec))
+            except Exception:
+                value = float("nan")
+            Z[j, i] = value if np.isfinite(value) else float("nan")
+    return X, Y, Z
+
+
+def _finite_values(Z, context):
+    finite = np.asarray(Z, dtype=float)[np.isfinite(Z)]
+    if finite.size == 0:
+        raise ValueError(f"No finite objective values on this landscape grid ({context}).")
+    return finite
+
+
+def _is_constant(finite):
+    return bool(np.ptp(finite) == 0)
+
+
+def plot_landscape_line(xs, ys, title, xlabel="x0"):
+    """Objective-versus-coordinate line plot for one-dimensional slices."""
+    xs = np.asarray(xs, dtype=float)
+    ys = np.asarray(ys, dtype=float)
+    mask = np.isfinite(ys)
+    if not np.any(mask):
+        raise ValueError("No finite objective values on this landscape grid (line).")
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.plot(xs[mask], ys[mask])
+    if _is_constant(ys[mask]):
+        ax.text(0.5, 0.5, f"Constant landscape: f = {float(ys[mask][0]):g}",
+                transform=ax.transAxes, ha="center", va="center")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Objective fitness")
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+def plot_landscape_contour(X, Y, Z, title, xlabel="x0", ylabel="x1"):
+    """Filled-contour view of a 2D objective slice."""
+    finite = _finite_values(Z, "contour")
+    fig, ax = plt.subplots(figsize=(7, 5))
+    masked = np.ma.masked_invalid(Z)
+    extent = (float(X.min()), float(X.max()), float(Y.min()), float(Y.max()))
+    if _is_constant(finite):
+        ax.imshow(masked, origin="lower", extent=extent, aspect="auto", cmap="viridis")
+        ax.text(0.5, 0.5, f"Constant landscape: f = {float(finite[0]):g}",
+                transform=ax.transAxes, ha="center", va="center")
+    else:
+        contour = ax.contourf(X, Y, masked, levels=50, cmap="viridis")
+        fig.colorbar(contour, ax=ax, label="Objective fitness")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+def plot_landscape_surface(X, Y, Z, title, xlabel="x0", ylabel="x1"):
+    """3D surface view of a 2D objective slice (height = fitness)."""
+    from mpl_toolkits.mplot3d import Axes3D  # noqa: F401  (registers 3D projection)
+
+    finite = _finite_values(Z, "surface")
+    fig = plt.figure(figsize=(7, 5))
+    ax = fig.add_subplot(111, projection="3d")
+    ax.plot_surface(X, Y, np.ma.masked_invalid(Z), cmap="viridis",
+                    edgecolor="none", alpha=0.9)
+    if _is_constant(finite):
+        ax.text2D(0.5, 0.5, f"Constant landscape: f = {float(finite[0]):g}",
+                  transform=ax.transAxes, ha="center")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_zlabel("Objective fitness (height)")
+    ax.set_title(title + "  [height = fitness]")
+    fig.tight_layout()
+    return fig
+
+
+def landscape_meta(function_name, dim, varied, fixed_values, rep, lb, ub,
+                   grid_n=LANDSCAPE_GRID):
+    """Slice metadata for display labels and ZIP archives."""
+    return {
+        "function": function_name,
+        "dimensions": int(dim),
+        "varied_coordinates": [f"x{i}" for i in varied] if varied else ["x0"],
+        "fixed_coordinates": {f"x{k}": float(v) for k, v in fixed_values.items()},
+        "slice_repetition": rep,
+        "bounds": [float(lb), float(ub)],
+        "grid": f"{int(grid_n)}x{int(grid_n)}" if varied and len(varied) == 2 else str(int(grid_n)),
+    }

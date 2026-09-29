@@ -10,11 +10,14 @@ implemented there; see the notes on local implementations in the app.
 """
 
 import matplotlib.pyplot as plt
+import numpy as np
 import streamlit as st
 
 import charts
 import hba_experiment
 from hba_experiment import DEFAULTS, FORMULAS, FUNCTION_ORDER, KNOWN_OPTIMUM, LIMITS, MINIMIZER_NOTES
+
+FUNCTION_OPTIONS = ["All functions"] + FUNCTION_ORDER
 
 st.set_page_config(page_title="HBA comparison", layout="wide")
 st.title("Honey Badger Algorithm — comparison across local objectives")
@@ -44,14 +47,23 @@ def _init_state():
     for key in ("hba_results", "hba_settings", "hba_computed"):
         if key not in st.session_state:
             st.session_state[key] = None
+    if "hba_run_id" not in st.session_state:
+        st.session_state["hba_run_id"] = 0
+    if "hba_seed_auto" not in st.session_state:
+        st.session_state["hba_seed_auto"] = False
+    for key in ("hba_landscapes", "hba_landscape_pngs", "hba_landscape_meta"):
+        if key not in st.session_state:
+            st.session_state[key] = {}
 
 
 def _run_form():
     with st.form("experiment_form"):
         st.subheader("Experiment configuration")
-        functions = st.multiselect(
-            "Functions", FUNCTION_ORDER, default=list(DEFAULTS["functions"])
+        function_choice = st.selectbox(
+            "Function", FUNCTION_OPTIONS, index=0,
+            help="All functions runs the six local objectives; or pick one.",
         )
+        functions = list(FUNCTION_ORDER) if function_choice == "All functions" else [function_choice]
         col1, col2, col3 = st.columns(3)
         with col1:
             agents = st.number_input(
@@ -75,8 +87,10 @@ def _run_form():
             lb = st.number_input("Lower bound", value=float(DEFAULTS["lb"]))
             ub = st.number_input("Upper bound", value=float(DEFAULTS["ub"]))
             seed = st.number_input(
-                "Master seed", min_value=0, max_value=2**32 - 1,
-                value=DEFAULTS["seed"], step=1,
+                "Master seed (optional)", min_value=0, max_value=2**32 - 1,
+                value=None, step=1,
+                help="Leave blank for a random seed drawn at submission; "
+                     "an explicit seed (including 0) reproduces results.",
             )
         submitted = st.form_submit_button("Run experiment")
     return submitted, {
@@ -87,7 +101,7 @@ def _run_form():
         "repetitions": int(repetitions),
         "lb": float(lb),
         "ub": float(ub),
-        "seed": int(seed),
+        "seed": None if seed is None else int(seed),
     }
 
 
@@ -99,7 +113,14 @@ def _execute(cfg):
             cfg["repetitions"], names,
         )
         hba_experiment.validate_bounds(cfg["lb"], cfg["ub"], names)
-        hba_experiment.validate_seed(cfg["seed"])
+        if cfg["seed"] is None:
+            import secrets
+
+            resolved_seed = secrets.randbelow(2**32)
+            seed_auto = True
+        else:
+            resolved_seed = hba_experiment.validate_seed(cfg["seed"])
+            seed_auto = False
     except ValueError as exc:
         st.error(str(exc))
         return
@@ -110,7 +131,7 @@ def _execute(cfg):
         results, settings = hba_experiment.run_experiment(
             names, agents=cfg["agents"], dimensions=cfg["dimensions"],
             iterations=cfg["iterations"], repetitions=cfg["repetitions"],
-            lb=cfg["lb"], ub=cfg["ub"], seed=cfg["seed"],
+            lb=cfg["lb"], ub=cfg["ub"], seed=resolved_seed,
             progress_callback=progress.progress,
         )
     except ValueError as exc:
@@ -119,13 +140,21 @@ def _execute(cfg):
         st.error(str(exc))
         return
     computed = charts.compute_all(results, KNOWN_OPTIMUM)
+    st.session_state["hba_run_id"] += 1
     st.session_state["hba_results"] = results
     st.session_state["hba_settings"] = settings
     st.session_state["hba_computed"] = computed
+    st.session_state["hba_seed_auto"] = seed_auto
+    # Stale landscape artifacts belong to the previous experiment.
+    st.session_state["hba_landscapes"] = {}
+    st.session_state["hba_landscape_pngs"] = {}
+    st.session_state["hba_landscape_meta"] = {}
     progress.progress(1.0)
+    origin = "drawn at submission" if seed_auto else "explicit"
     status.success(
         f"Completed: {len(names)} function(s) × {settings.repetitions} repetition(s), "
-        f"{settings.iterations} iterations. Seeds {settings.seeds[0]}–{settings.seeds[-1]} "
+        f"{settings.iterations} iterations. Master seed {settings.seed} ({origin}); "
+        f"repetition seeds {settings.seeds[0]}–{settings.seeds[-1]} "
         "(same schedule across functions)."
     )
 
@@ -219,13 +248,147 @@ def _function_tab(results, settings, computed):
             row[f"x{i}"] = float(v)
         pos_rows.append(row)
     st.dataframe(pos_rows, use_container_width=True)
+    _landscape_section(name, results, settings)
+
+
+def _cached_grid(grid_key, compute):
+    store = st.session_state["hba_landscapes"]
+    if grid_key not in store:
+        store[grid_key] = compute()
+    return store[grid_key]
+
+
+def _landscape_png(png_key, fig):
+    store = st.session_state["hba_landscape_pngs"]
+    if png_key not in store:
+        store[png_key] = charts.figure_png(fig)
+    return store[png_key]
+
+
+def _show_landscape_fig(make, png_key, download_label, file_name, dl_key, meta_key, meta):
+    try:
+        fig = make()
+    except ValueError as exc:
+        st.warning(str(exc))
+        return
+    try:
+        png = _landscape_png(png_key, fig)
+        st.pyplot(fig)
+    finally:
+        plt.close(fig)
+    st.download_button(
+        download_label, png, file_name=file_name, mime="image/png", key=dl_key,
+    )
+    st.session_state["hba_landscape_meta"][meta_key] = meta
+
+
+def _render_landscape_kind(kind, grid, labels, name, png_prefix, meta):
+    run_id = st.session_state["hba_run_id"]
+    if kind == "line":
+        xs, ys = grid
+        title = f"{name}: objective vs {labels['varied']}"
+        _show_landscape_fig(
+            lambda: charts.plot_landscape_line(xs, ys, title, xlabel=labels["varied"]),
+            (run_id, png_prefix, "line"),
+            "Landscape PNG (line)", f"{png_prefix}_landscape_line.png",
+            f"dl_land_{png_prefix}_line", (run_id, png_prefix, "line"), meta,
+        )
+        return
+    X, Y, Z = grid
+    if kind == "contour":
+        title = f"{name}: contour over {labels['varied']}"
+        make = lambda: charts.plot_landscape_contour(
+            X, Y, Z, title, xlabel=labels["x"], ylabel=labels["y"])
+    else:
+        title = f"{name}: surface over {labels['varied']}"
+        make = lambda: charts.plot_landscape_surface(
+            X, Y, Z, title, xlabel=labels["x"], ylabel=labels["y"])
+    _show_landscape_fig(
+        make, (run_id, png_prefix, kind),
+        f"Landscape PNG ({kind})", f"{png_prefix}_landscape_{kind}.png",
+        f"dl_land_{png_prefix}_{kind}", (run_id, png_prefix, kind), meta,
+    )
+
+
+def _landscape_section(name, results, settings):
+    run_id = st.session_state["hba_run_id"]
+    dim = settings.dimensions
+    st.subheader("Objective landscape")
+    st.caption("Surface height represents objective fitness, not a third optimization coordinate.")
+    show = st.checkbox(
+        "Show objective landscape", value=False, key=f"land_show_r{run_id}_{name}",
+    )
+    if not show:
+        return
+    func = hba_experiment.FUNCTIONS[name]
+    lb, ub = settings.lb, settings.ub
+    if dim == 1:
+        grid_key = (run_id, name, "line")
+        grid = _cached_grid(
+            grid_key, lambda: charts.evaluate_landscape_1d(func, lb, ub))
+        meta = charts.landscape_meta(name, dim, [0], {}, None, lb, ub)
+        st.markdown("**Varied:** `x0`. Full 1D objective landscape.")
+        _render_landscape_kind("line", grid, {"varied": "x0"}, name,
+                               f"{name}_d1", meta)
+        return
+    view = st.radio(
+        "Landscape view", ["Both", "2D contour", "3D surface"], index=0,
+        horizontal=True, key=f"land_view_r{run_id}_{name}",
+    )
+    kinds = ["contour", "surface"] if view == "Both" else (
+        ["contour"] if view == "2D contour" else ["surface"])
+    if dim == 2:
+        grid_key = (run_id, name, "full")
+        grid = _cached_grid(
+            grid_key,
+            lambda: charts.evaluate_landscape_2d(
+                func, dim, lb, ub, 0, 1, np.zeros(dim)),
+        )
+        meta = charts.landscape_meta(name, dim, [0, 1], {}, None, lb, ub)
+        st.markdown("**Varied:** `x0`, `x1`. Full 2D objective landscape.")
+        labels = {"varied": "`x0` × `x1`", "x": "x0", "y": "x1"}
+        prefix = f"{name}_x0_x1"
+        for kind in kinds:
+            _render_landscape_kind(kind, grid, labels, name, prefix, meta)
+        return
+    coord_options = [f"x{i}" for i in range(dim)]
+    cx_label = st.selectbox(
+        "X coordinate", coord_options, index=0, key=f"land_cx_r{run_id}_{name}")
+    cy_label = st.selectbox(
+        "Y coordinate", coord_options, index=1, key=f"land_cy_r{run_id}_{name}")
+    ix, iy = int(cx_label[1:]), int(cy_label[1:])
+    if ix == iy:
+        st.error("Select two distinct coordinates for the landscape slice.")
+        return
+    rep = st.selectbox(
+        "Slice repetition (best position holds fixed coordinates)",
+        list(range(1, settings.repetitions + 1)), index=0,
+        key=f"land_rep_r{run_id}_{name}",
+    )
+    fixed = np.asarray(results[name][rep - 1].best_position, dtype=float)
+    grid_key = (run_id, name, ix, iy, rep)
+    grid = _cached_grid(
+        grid_key,
+        lambda: charts.evaluate_landscape_2d(func, dim, lb, ub, ix, iy, fixed),
+    )
+    fixed_values = {k: float(fixed[k]) for k in range(dim) if k not in (ix, iy)}
+    meta = charts.landscape_meta(name, dim, [ix, iy], fixed_values, rep, lb, ub)
+    fixed_text = ", ".join(f"`x{k}={v:g}`" for k, v in fixed_values.items())
+    st.markdown(
+        f"**Varied:** `{cx_label}` × `{cy_label}`. "
+        f"**Fixed** at repetition {rep}'s best position: {fixed_text}.")
+    labels = {"varied": f"`{cx_label}` × `{cy_label}`", "x": cx_label, "y": cy_label}
+    prefix = f"{name}_{cx_label}_{cy_label}_rep{rep}"
+    for kind in kinds:
+        _render_landscape_kind(kind, grid, labels, name, prefix, meta)
 
 
 def _downloads_tab(results, settings, computed):
     st.caption("All files are generated in memory from the retained results; downloading never reruns optimization.")
+    seed_extra = {"master_seed_auto": bool(st.session_state["hba_seed_auto"])}
     st.download_button(
         "settings/seeds JSON",
-        charts.settings_json(settings),
+        charts.settings_json(settings, seed_extra),
         file_name="settings.json",
         mime="application/json",
         key="dl_settings",
@@ -290,8 +453,34 @@ def _downloads_tab(results, settings, computed):
         fig_err = charts.plot_error(entry["per_iteration"], f"{name}: error", scale="symlog")
         figures[f"{name}_error_symlog.png"] = charts.figure_png(fig_err)
         plt.close(fig_err)
+    run_id = st.session_state["hba_run_id"]
+    land_pngs = st.session_state["hba_landscape_pngs"]
+    land_meta = st.session_state["hba_landscape_meta"]
+    extra_files = {}
+    land_entries = []
+    if land_pngs:
+        st.markdown("**Generated landscape images**")
+    for (rid, prefix, kind), png in sorted(
+            land_pngs.items(), key=lambda kv: (str(kv[0][1]), str(kv[0][2]))):
+        if rid != run_id:
+            continue
+        arcname = f"landscapes/{prefix}_landscape_{kind}.png"
+        figures[arcname] = png
+        meta = land_meta.get((rid, prefix, kind), {})
+        land_entries.append({"file": arcname, "png_key": f"{prefix}/{kind}", "slice": meta})
+        st.download_button(
+            f"Landscape PNG ({prefix}, {kind})", png,
+            file_name=f"{prefix}_landscape_{kind}.png", mime="image/png",
+            key=f"dl_landzip_{prefix}_{kind}",
+        )
+    if land_entries:
+        import json as _json
+
+        extra_files["landscapes/slices.json"] = _json.dumps(land_entries, indent=2)
     st.download_button(
-        "Download all (ZIP)", charts.build_zip(results, computed, settings, figures),
+        "Download all (ZIP)",
+        charts.build_zip(results, computed, settings, figures,
+                         extra=seed_extra, extra_files=extra_files),
         file_name="hba_results.zip", mime="application/zip", key="dl_zip",
     )
 
@@ -310,9 +499,18 @@ def main():
             f"Defaults: all six functions, {DEFAULTS['agents']} agents, "
             f"{DEFAULTS['dimensions']} dimensions, {DEFAULTS['iterations']} iterations, "
             f"{DEFAULTS['repetitions']} repetitions, bounds "
-            f"[{DEFAULTS['lb']:g}, {DEFAULTS['ub']:g}], seed {DEFAULTS['seed']}."
+            f"[{DEFAULTS['lb']:g}, {DEFAULTS['ub']:g}], blank master seed (random)."
         )
         return
+    origin = "drawn at submission" if st.session_state["hba_seed_auto"] else "explicit"
+    st.caption(
+        f"Completed experiment: {len(results)} function(s) × "
+        f"{settings.repetitions} repetition(s), {settings.iterations} iterations, "
+        f"{settings.dimensions}D, bounds [{settings.lb:g}, {settings.ub:g}]. "
+        f"Master seed {settings.seed} ({origin}); repetition seeds "
+        f"{settings.seeds[0]}–{settings.seeds[-1]} (same schedule across functions). "
+        "Changing chart, landscape, or download options never reruns optimization."
+    )
     tab_cmp, tab_fn, tab_dl = st.tabs(["Comparison", "Function details", "Downloads"])
     with tab_cmp:
         _comparison_tab(results, settings, computed)
