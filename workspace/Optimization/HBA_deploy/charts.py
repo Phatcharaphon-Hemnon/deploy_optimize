@@ -402,8 +402,48 @@ def _anim_title(function_name, repetition, seed, iteration, best_fitness):
     )
 
 
+#: Compact animation figure size (CSS px); figures shrink to fit narrow screens.
+ANIM_WIDTH = 800
+ANIM_HEIGHT = 560
+
+#: Contrasting marker styles (readable on light/dark themes and Viridis).
+AGENT_MARKER = {"size": 8, "color": "#FF4136",
+                "line": {"color": "black", "width": 1}}
+BEST_MARKER = {"size": 14, "symbol": "star", "color": "gold",
+               "line": {"color": "black", "width": 1.5}}
+AGENT_MARKER_3D = {"size": 5, "color": "#FF4136",
+                   "line": {"color": "black", "width": 1}}
+BEST_MARKER_3D = {"size": 8, "symbol": "diamond", "color": "gold",
+                  "line": {"color": "black", "width": 1.5}}
+
+
+def _anim_base_layout(title):
+    """Shared compact sizing: ~800x560, room for controls below the plot."""
+    return {
+        "title": title,
+        "autosize": True,
+        "width": ANIM_WIDTH,
+        "height": ANIM_HEIGHT,
+        "margin": {"l": 60, "r": 70, "t": 60, "b": 120},
+        "legend": {"orientation": "h", "x": 0.5, "y": -0.30,
+                   "xanchor": "center", "yanchor": "top",
+                   "bgcolor": "rgba(255,255,255,0.6)"},
+    }
+
+
+def _anim_menu(buttons):
+    """Play/Pause buttons on their own row below the plot, left of the slider."""
+    return {"type": "buttons", "direction": "left", "showactive": False,
+            "x": 0.0, "y": -0.08, "xanchor": "left", "yanchor": "top",
+            "pad": {"r": 10, "t": 10}, "buttons": buttons}
+
+
 def _playback_controls(frame_names, frame_ms):
-    """Shared Play/Pause buttons and iteration slider for Plotly animations."""
+    """Shared Play/Pause buttons and iteration slider for Plotly animations.
+
+    Every frame keeps a slider step (full scrub range); only a sparse subset
+    of steps shows a text label so labels never overlap.
+    """
     frame_ms = int(frame_ms)
     buttons = [
         {
@@ -432,9 +472,11 @@ def _playback_controls(frame_names, frame_ms):
             ],
         },
     ]
+    stride = max(1, len(frame_names) // 12)
     steps = [
         {
-            "label": str(nm),
+            # Every frame stays scrubbable; sparse labels avoid overlap.
+            "label": (str(nm) if (i % stride == 0 or i == len(frame_names) - 1) else ""),
             "method": "animate",
             "args": [
                 [nm],
@@ -445,9 +487,11 @@ def _playback_controls(frame_names, frame_ms):
                 },
             ],
         }
-        for nm in frame_names
+        for i, nm in enumerate(frame_names)
     ]
-    sliders = [{"steps": steps, "currentvalue": {"prefix": "Iteration: "}}]
+    sliders = [{"steps": steps, "currentvalue": {"prefix": "Iteration: "},
+                "x": 0.28, "xanchor": "left", "y": -0.08, "len": 0.70,
+                "pad": {"t": 10}}]
     return buttons, sliders
 
 
@@ -478,23 +522,25 @@ def build_animation_1d(xs, ys, trajectory, function_name, repetition, seed,
     best_x = float(bests[0, 0])
     best_y = float(best_fit[0])
     title0 = _anim_title(function_name, repetition, seed, it0, best_y)
+    layout = _anim_base_layout(title0)
+    layout.update({
+        "xaxis": {"range": [float(lb), float(ub)], "title": "x0"},
+        "yaxis": {"range": [ylo, yhi], "title": "Objective fitness"},
+    })
     fig = go.Figure(
         data=[
             go.Scatter(x=xs[mask].tolist(), y=ys[mask].tolist(), mode="lines",
-                       name="Objective f(x0)"),
+                       name="Objective f(x0)", line={"width": 2}),
             go.Scatter(x=agents_x.tolist(), y=agents_y.tolist(), mode="markers",
-                       name="Agents", marker={"size": 7}),
+                       name="Agents", marker=dict(AGENT_MARKER)),
             go.Scatter(x=[best_x], y=[best_y], mode="markers",
-                       name="Best", marker={"size": 12, "symbol": "star"}),
+                       name="Best", marker=dict(BEST_MARKER)),
         ],
-        layout={
-            "title": title0,
-            "xaxis": {"range": [float(lb), float(ub)], "title": "x0"},
-            "yaxis": {"range": [ylo, yhi], "title": "Objective fitness"},
-        },
+        layout=layout,
         frames=[
             go.Frame(
                 name=str(it),
+                traces=[1, 2],
                 data=[
                     go.Scatter(x=pops[k, :, 0].tolist(),
                                y=np.asarray(trajectory.population_fitness, dtype=float)[k].tolist()),
@@ -506,7 +552,7 @@ def build_animation_1d(xs, ys, trajectory, function_name, repetition, seed,
         ],
     )
     buttons, sliders = _playback_controls([str(v) for v in frame_iters], frame_ms)
-    fig.update_layout(updatemenus=[{"type": "buttons", "buttons": buttons}], sliders=sliders)
+    fig.update_layout(updatemenus=[_anim_menu(buttons)], sliders=sliders)
     return fig
 
 
@@ -532,28 +578,35 @@ def build_animation_contour(X, Y, Z, trajectory, ix, iy, function_name,
     it0 = frame_iters[0]
     ax, ay = pops[0, :, ix].tolist(), pops[0, :, iy].tolist()
     hover0 = [f"agent {i}<br>actual fitness {float(pop_fit[0, i]):.6g}" for i in range(len(ax))]
+    layout = _anim_base_layout(
+        _anim_title(function_name, repetition, seed, it0, float(best_fit[0])))
+    layout.update({
+        "xaxis": {"range": [float(lb), float(ub)], "title": f"x{ix}",
+                  "scaleanchor": "y", "scaleratio": 1},
+        "yaxis": {"range": [float(lb), float(ub)], "title": f"x{iy}"},
+    })
     fig = go.Figure(
         data=[
             go.Contour(x=X[0].tolist(), y=Y[:, 0].tolist(), z=Z.tolist(),
                        colorscale="Viridis", zmin=zmin, zmax=zmax,
+                       contours={"coloring": "fill", "showlines": False},
+                       ncontours=30,
                        name="Objective slice", showscale=True,
-                       colorbar={"title": "Objective fitness (slice)"}),
+                       colorbar={"title": "Objective fitness (slice)",
+                                 "thickness": 12, "len": 0.75}),
             go.Scatter(x=ax, y=ay, mode="markers", name=agent_label,
-                       marker={"size": 7}, text=hover0, hoverinfo="text"),
+                       marker=dict(AGENT_MARKER), text=hover0, hoverinfo="text"),
             go.Scatter(x=[float(bests[0, ix])], y=[float(bests[0, iy])],
                        mode="markers", name=best_label,
-                       marker={"size": 12, "symbol": "star"},
+                       marker=dict(BEST_MARKER),
                        text=[f"best<br>actual fitness {float(best_fit[0]):.6g}"],
                        hoverinfo="text"),
         ],
-        layout={
-            "title": _anim_title(function_name, repetition, seed, it0, float(best_fit[0])),
-            "xaxis": {"range": [float(lb), float(ub)], "title": f"x{ix}"},
-            "yaxis": {"range": [float(lb), float(ub)], "title": f"x{iy}"},
-        },
+        layout=layout,
         frames=[
             go.Frame(
                 name=str(it),
+                traces=[1, 2],
                 data=[
                     go.Scatter(
                         x=pops[k, :, ix].tolist(), y=pops[k, :, iy].tolist(),
@@ -571,7 +624,7 @@ def build_animation_contour(X, Y, Z, trajectory, ix, iy, function_name,
         ],
     )
     buttons, sliders = _playback_controls([str(v) for v in frame_iters], frame_ms)
-    fig.update_layout(updatemenus=[{"type": "buttons", "buttons": buttons}], sliders=sliders)
+    fig.update_layout(updatemenus=[_anim_menu(buttons)], sliders=sliders)
     return fig
 
 
@@ -620,34 +673,38 @@ def build_animation_surface(X, Y, Z, trajectory, ix, iy, fixed, func,
     agent_label = (f"Agents (x{ix}×x{iy} projection)" if projected else "Agents")
     best_label = (f"Best (x{ix}×x{iy} projection)" if projected else "Best")
     it0 = frame_iters[0]
+    layout = _anim_base_layout(
+        _anim_title(function_name, repetition, seed, it0, float(best_fit[0])))
+    layout.update({
+        "scene": {
+            "xaxis": {"range": [float(lb), float(ub)], "title": f"x{ix}"},
+            "yaxis": {"range": [float(lb), float(ub)], "title": f"x{iy}"},
+            "zaxis": {"range": [zmin, zmax], "title": "Objective fitness (slice height)"},
+        },
+    })
     fig = go.Figure(
         data=[
             go.Surface(x=X.tolist(), y=Y.tolist(), z=Z.tolist(),
                        colorscale="Viridis", cmin=zmin, cmax=zmax,
                        name="Objective slice",
-                       colorbar={"title": "Objective fitness (slice)"}),
+                       colorbar={"title": "Objective fitness (slice)",
+                                 "thickness": 12, "len": 0.75}),
             go.Scatter3d(x=ax0, y=ay0, z=az0, mode="markers", name=agent_label,
-                         marker={"size": 4},
+                         marker=dict(AGENT_MARKER_3D),
                          text=[f"agent {i}<br>slice height {float(az0[i]):.6g}<br>"
                                f"actual fitness {float(pop_fit[0, i]):.6g}" for i in range(n_agents)],
                          hoverinfo="text"),
             go.Scatter3d(x=[bx0], y=[by0], z=[bz0], mode="markers", name=best_label,
-                         marker={"size": 7, "symbol": "diamond"},
+                         marker=dict(BEST_MARKER_3D),
                          text=[f"best<br>slice height {float(bz0):.6g}<br>"
                                f"actual fitness {float(best_fit[0]):.6g}"],
                          hoverinfo="text"),
         ],
-        layout={
-            "title": _anim_title(function_name, repetition, seed, it0, float(best_fit[0])),
-            "scene": {
-                "xaxis": {"range": [float(lb), float(ub)], "title": f"x{ix}"},
-                "yaxis": {"range": [float(lb), float(ub)], "title": f"x{iy}"},
-                "zaxis": {"range": [zmin, zmax], "title": "Objective fitness (slice height)"},
-            },
-        },
+        layout=layout,
         frames=[
             go.Frame(
                 name=str(it),
+                traces=[1, 2],
                 data=[
                     go.Scatter3d(
                         x=pops[k, :, ix].tolist(), y=pops[k, :, iy].tolist(),
@@ -668,7 +725,7 @@ def build_animation_surface(X, Y, Z, trajectory, ix, iy, fixed, func,
         ],
     )
     buttons, sliders = _playback_controls([str(v) for v in frame_iters], frame_ms)
-    fig.update_layout(updatemenus=[{"type": "buttons", "buttons": buttons}], sliders=sliders)
+    fig.update_layout(updatemenus=[_anim_menu(buttons)], sliders=sliders)
     return fig
 
 

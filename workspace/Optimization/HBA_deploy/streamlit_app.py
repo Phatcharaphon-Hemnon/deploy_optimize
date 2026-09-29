@@ -468,13 +468,13 @@ def _animation_section(name, results, settings):
     )
     func = hba_experiment.FUNCTIONS[name]
     lb, ub = settings.lb, settings.ub
-    speed = st.selectbox(
-        "Playback speed", list(SPEED_TO_MS), index=1,
-        key=f"anim_speed_r{run_id}_{name}",
-        help="Frame duration only; playback never reruns optimization.",
-    )
-    frame_ms = SPEED_TO_MS[speed]
     if dim == 1:
+        speed = st.selectbox(
+            "Playback speed", list(SPEED_TO_MS), index=1,
+            key=f"anim_speed_r{run_id}_{name}",
+            help="Frame duration only; playback never reruns optimization.",
+        )
+        frame_ms = SPEED_TO_MS[speed]
         grid = _cached_grid(
             (run_id, name, "line"),
             lambda: charts.evaluate_landscape_1d(func, lb, ub))
@@ -498,11 +498,20 @@ def _animation_section(name, results, settings):
             key=f"dl_anim_{name}_line",
         )
         return
-    kind = st.radio(
-        "Animation view", ["2D contour", "3D surface"], index=0, horizontal=True,
-        key=f"anim_view_r{run_id}_{name}",
-        help="Only the selected animation is generated on demand; grids stay static during playback.",
-    )
+    ctl_speed, ctl_view = st.columns(2)
+    with ctl_speed:
+        speed = st.selectbox(
+            "Playback speed", list(SPEED_TO_MS), index=1,
+            key=f"anim_speed_r{run_id}_{name}",
+            help="Frame duration only; playback never reruns optimization.",
+        )
+    with ctl_view:
+        kind = st.radio(
+            "Animation view", ["2D contour", "3D surface"], index=0, horizontal=True,
+            key=f"anim_view_r{run_id}_{name}",
+            help="Only the selected animation is generated on demand; grids stay static during playback.",
+        )
+    frame_ms = SPEED_TO_MS[speed]
     kind_key = "contour" if kind == "2D contour" else "surface"
     if dim == 2:
         ix, iy = 0, 1
@@ -515,12 +524,15 @@ def _animation_section(name, results, settings):
         st.markdown("**Varied:** `x0` × `x1`. Full 2D objective landscape; markers show true positions.")
     else:
         coord_options = [f"x{i}" for i in range(dim)]
-        cx_label = st.selectbox(
-            "Animation X coordinate", coord_options, index=0,
-            key=f"anim_cx_r{run_id}_{name}")
-        cy_label = st.selectbox(
-            "Animation Y coordinate", coord_options, index=1,
-            key=f"anim_cy_r{run_id}_{name}")
+        sel_x, sel_y = st.columns(2)
+        with sel_x:
+            cx_label = st.selectbox(
+                "Animation X coordinate", coord_options, index=0,
+                key=f"anim_cx_r{run_id}_{name}")
+        with sel_y:
+            cy_label = st.selectbox(
+                "Animation Y coordinate", coord_options, index=1,
+                key=f"anim_cy_r{run_id}_{name}")
         ix, iy = int(cx_label[1:]), int(cy_label[1:])
         if ix == iy:
             st.error("Select two distinct coordinates for the animation slice.")
