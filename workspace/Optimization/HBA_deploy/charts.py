@@ -24,6 +24,26 @@ import numpy as np
 LINTHRESH = 1e-12
 
 
+def _plain_symlog_tick(value, _pos):
+    """Plain-text formatting for symlog major ticks (no mathtext)."""
+    if value == 0:
+        return "0"
+    return format(float(value), ".6g")
+
+
+def _apply_plain_symlog_ticks(ax):
+    """Use plain-text major ticks and hide minor tick labels on a symlog axis.
+
+    The default symlog formatter emits mathtext (``$10^{...}$``), which fails
+    when the deployed math parser is broken. Plain ``".6g"`` labels remove
+    that dependency without changing scaling, thresholds, or plotted values.
+    """
+    from matplotlib.ticker import FuncFormatter, NullFormatter
+
+    ax.yaxis.set_major_formatter(FuncFormatter(_plain_symlog_tick))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+
 def _as_histories(runs):
     return np.asarray([np.asarray(r.best_history, dtype=float) for r in runs], dtype=float)
 
@@ -124,6 +144,7 @@ def plot_error(per_iteration, title, scale="symlog", xlabel="Iteration"):
               alpha=0.25, label="Mean ± sample std")
     if scale == "symlog":
         ax.set_yscale("symlog", linthresh=LINTHRESH)
+        _apply_plain_symlog_ticks(ax)
     ax.set_xlabel(xlabel)
     ax.set_ylabel("abs(best fitness - optimum)")
     ax.set_title(title)
@@ -138,6 +159,7 @@ def plot_combined_mean_error(computed, title="Mean error across functions"):
         xs = np.arange(len(entry["per_iteration"]["mean_error"]))
         ax.plot(xs, entry["per_iteration"]["mean_error"], label=name)
     ax.set_yscale("symlog", linthresh=LINTHRESH)
+    _apply_plain_symlog_ticks(ax)
     ax.set_xlabel("Iteration")
     ax.set_ylabel("Mean abs error (symlog)")
     ax.set_title(title)
