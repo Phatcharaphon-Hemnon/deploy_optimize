@@ -259,16 +259,24 @@ def _summary_rows(computed):
             "function": name,
             "mean fitness": final["mean_fitness"],
             "median fitness": final["median_fitness"],
-            "std fitness": "n/a" if final["std_fitness"] is None else final["std_fitness"],
+            "std fitness": final["std_fitness"],  # None -> numeric null when n == 1
             "min fitness": final["min_fitness"],
             "max fitness": final["max_fitness"],
             "mean error": final["mean_error"],
             "median error": final["median_error"],
-            "std error": "n/a" if final["std_error"] is None else final["std_error"],
+            "std error": final["std_error"],  # None -> numeric null when n == 1
             "min error": final["min_error"],
             "max error": final["max_error"],
         })
     return rows
+
+
+def _sci_column_config(columns):
+    """Compact ``%.4g`` display (four significant digits, powers of ten for
+    tiny/large values) while keeping underlying values numeric for sorting."""
+    return {
+        col: st.column_config.NumberColumn(col, format="%.4g") for col in columns
+    }
 
 
 def _comparison_tab(results, settings, computed):
@@ -297,9 +305,21 @@ def _comparison_tab(results, settings, computed):
     st.caption(
         "Mean/median/min/max over repetitions of final best fitness and error. "
         "Standard deviation is the sample standard deviation (ddof=1); "
-        "it is unavailable ('n/a') with a single repetition."
+        "it is blank (missing) with a single repetition. "
+        "Values display with four significant digits (`%.4g`, powers of ten "
+        "for tiny or large magnitudes); underlying values keep full precision "
+        "and sort numerically."
     )
-    st.dataframe(_summary_rows(computed), use_container_width=True)
+    st.dataframe(
+        _summary_rows(computed),
+        use_container_width=True,
+        column_config=_sci_column_config([
+            "mean fitness", "median fitness", "std fitness",
+            "min fitness", "max fitness",
+            "mean error", "median error", "std error",
+            "min error", "max error",
+        ]),
+    )
 
 
 def _function_tab(results, settings, computed):
@@ -330,6 +350,10 @@ def _function_tab(results, settings, computed):
     st.pyplot(fig_err)
     plt.close(fig_err)
     st.subheader("Best positions per repetition")
+    st.caption(
+        "Fitness, error, and coordinates display with four significant digits "
+        "(`%.4g`); underlying values keep full precision and sort numerically."
+    )
     runs = results[name]
     pos_rows = []
     for r, run in enumerate(runs):
@@ -338,7 +362,14 @@ def _function_tab(results, settings, computed):
         for i, v in enumerate(run.best_position):
             row[f"x{i}"] = float(v)
         pos_rows.append(row)
-    st.dataframe(pos_rows, use_container_width=True)
+    st.dataframe(
+        pos_rows,
+        use_container_width=True,
+        column_config=_sci_column_config(
+            ["final fitness", "final error"]
+            + [f"x{i}" for i in range(len(runs[0].best_position))]
+        ),
+    )
     _landscape_section(name, results, settings)
     _animation_section(name, results, settings)
 
