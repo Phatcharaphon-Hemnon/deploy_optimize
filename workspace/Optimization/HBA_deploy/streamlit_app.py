@@ -15,6 +15,35 @@ import streamlit as st
 
 import charts
 import hba_experiment
+
+#: Names ``streamlit_app.py`` requires from the engine module. Validated
+#: before use so a stale/duplicated deployment fails with the loaded path and
+#: the missing names instead of a bare ImportError. No fallbacks, no reloads.
+REQUIRED_ENGINE_EXPORTS = (
+    "DEFAULTS", "DISPLAY_NAMES", "FORMULAS", "FUNCTION_ORDER",
+    "KNOWN_OPTIMUM", "LIMITS", "MINIMIZER_NOTES", "MODEL_REVISION",
+)
+
+_missing_engine_exports = [
+    name for name in REQUIRED_ENGINE_EXPORTS if not hasattr(hba_experiment, name)
+]
+if _missing_engine_exports:
+    import logging as _logging
+
+    _logging.error(
+        "Deployment version mismatch: loaded hba_experiment from %s; "
+        "missing exports: %s",
+        getattr(hba_experiment, "__file__", "?"), _missing_engine_exports,
+    )
+    raise ImportError(
+        "Deployment version mismatch: the loaded hba_experiment module "
+        f"({getattr(hba_experiment, '__file__', '?')}) is missing "
+        f"{sorted(_missing_engine_exports)}. Redeploy with matching app, "
+        "experiment, charts, and objective sources (commit 19446ae or later) "
+        "and reboot the app (a page refresh alone keeps imported modules)."
+    )
+del _missing_engine_exports
+
 from hba_experiment import DEFAULTS, DISPLAY_NAMES, FORMULAS, FUNCTION_ORDER, KNOWN_OPTIMUM, LIMITS, MINIMIZER_NOTES, MODEL_REVISION
 
 FUNCTION_OPTIONS = ["All functions"] + FUNCTION_ORDER
