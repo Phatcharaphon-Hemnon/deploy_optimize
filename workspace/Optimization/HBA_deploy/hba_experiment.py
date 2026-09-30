@@ -6,13 +6,13 @@ legacy ``main.py`` demonstration calls :func:`optimize` instead of keeping a
 second optimization loop.
 
 Objective functions are imported directly from ``_tool.py`` exactly as
-implemented there; they are intentionally not corrected here. In particular:
+implemented there. In particular:
 
-- ``paraboloid`` overwrites its accumulator, so it uses only the last
-  coordinate (``x[-1]**2``).
-- ``powell_sum`` computes weighted squares ``abs(i * x[i]**2)``.
-- ``schwefel`` computes an absolute sum ``sum(abs(x[i]))``, not the
-  commonly named Schwefel 2.26 objective.
+- ``paraboloid`` sums squares across every coordinate (Sphere).
+- ``powell_sum`` implements the Sum of Different Powers
+  ``sum(abs(x[i]) ** (i + 2))``.
+- ``schwefel`` computes an absolute sum ``sum(abs(x[i]))`` (displayed as
+  Absolute Sum (L1)), not the commonly named Schwefel 2.26 objective.
 
 Comparisons produced with these callables are results for these local
 implementations.
@@ -52,12 +52,23 @@ FUNCTION_ORDER = ["rosenbrock", "powell_sum", "schwefel", "paraboloid", "rastrig
 #: bounds contain it (1-vector for Rosenbrock, 0-vector for the others).
 KNOWN_OPTIMUM = 0.0
 
+#: Display labels used across the dashboard (internal identifiers stay unchanged
+#: in code, CSV/JSON exports, and archives).
+DISPLAY_NAMES = {
+    "rosenbrock": "Rosenbrock",
+    "powell_sum": "Sum of Different Powers",
+    "schwefel": "Absolute Sum (L1)",
+    "paraboloid": "Paraboloid (Sphere)",
+    "rastrigin": "Rastrigin",
+    "griewank": "Griewank",
+}
+
 #: Displayed formulas (exact local behaviour, not textbook definitions).
 FORMULAS = {
     "rosenbrock": "sum of 100*(x[i]**2 - x[i+1])**2 + (1 - x[i])**2 for adjacent coordinates",
-    "powell_sum": "sum of abs(i * (x[i]**2))  [weighted squares; i starts at 0, so the first term is always 0]",
-    "schwefel": "sum of abs(x[i])  [absolute sum; not the commonly named Schwefel 2.26 objective]",
-    "paraboloid": "x[-1]**2  [loop overwrites the accumulator, so only the last coordinate is used]",
+    "powell_sum": "sum of abs(x[i])**(i + 2)  [Sum of Different Powers; i starts at 0, so exponents run 2..D+1]",
+    "schwefel": "sum of abs(x[i])  [absolute sum (L1); not the commonly named Schwefel 2.26 objective]",
+    "paraboloid": "sum of x[i]**2 over every coordinate  [Sphere]",
     "rastrigin": "10*D + sum(x[i]**2 - 10*cos(2*pi*x[i]))",
     "griewank": "1 + sum(x[i]**2)/4000 - prod(cos(x[i] / sqrt(i + 1)))",
 }
@@ -66,10 +77,16 @@ MINIMIZER_NOTES = {
     "rosenbrock": "Known minimizer (1, ..., 1) with value 0; requires 1 in bounds and at least 2 dimensions.",
     "powell_sum": "Known minimizer (0, ..., 0) with value 0; requires 0 in bounds.",
     "schwefel": "Known minimizer (0, ..., 0) with value 0; requires 0 in bounds.",
-    "paraboloid": "A known minimizer is (0, ..., 0) with value 0 (any vector with last coordinate 0 attains 0); requires 0 in bounds.",
+    "paraboloid": "Known minimizer (0, ..., 0) with value 0; requires 0 in bounds.",
     "rastrigin": "Known minimizer (0, ..., 0) with value 0; requires 0 in bounds.",
     "griewank": "Known minimizer (0, ..., 0) with value 0; requires 0 in bounds.",
 }
+
+#: Revision of the objective/optimizer model. Bump whenever formulas or
+#: equations change; the dashboard clears retained results from older revisions
+#: instead of mixing them with new runs. Revision 1 was the pre-correction set
+#: (last-coordinate paraboloid, weighted-squares ``powell_sum``).
+MODEL_REVISION = 2
 
 DEFAULTS = {
     "functions": list(FUNCTION_ORDER),
@@ -338,6 +355,7 @@ class ExperimentSettings:
     record_animation: bool = False
     record_rep: int = 1
     record_frames: list = field(default_factory=list)
+    model_revision: int = MODEL_REVISION
 
     def to_dict(self):
         return {
@@ -354,6 +372,7 @@ class ExperimentSettings:
             "record_animation": bool(self.record_animation),
             "record_rep": int(self.record_rep),
             "record_frames": [int(v) for v in list(self.record_frames)],
+            "model_revision": int(self.model_revision),
         }
 
 

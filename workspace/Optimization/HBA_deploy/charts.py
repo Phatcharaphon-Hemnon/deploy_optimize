@@ -153,11 +153,13 @@ def plot_error(per_iteration, title, scale="symlog", xlabel="Iteration"):
     return fig
 
 
-def plot_combined_mean_error(computed, title="Mean error across functions"):
+def plot_combined_mean_error(computed, title="Mean error across functions",
+                             display_names=None):
     fig, ax = plt.subplots(figsize=(8, 4.5))
     for name, entry in computed.items():
         xs = np.arange(len(entry["per_iteration"]["mean_error"]))
-        ax.plot(xs, entry["per_iteration"]["mean_error"], label=name)
+        label = display_names.get(name, name) if display_names else name
+        ax.plot(xs, entry["per_iteration"]["mean_error"], label=label)
     ax.set_yscale("symlog", linthresh=LINTHRESH)
     _apply_plain_symlog_ticks(ax)
     ax.set_xlabel("Iteration")
@@ -346,13 +348,14 @@ def plot_landscape_line(xs, ys, title, xlabel="x0"):
 
 
 def plot_landscape_contour(X, Y, Z, title, xlabel="x0", ylabel="x1"):
-    """Filled-contour view of a 2D objective slice."""
+    """Filled-contour view of a 2D objective slice (equal coordinate scaling)."""
     finite = _finite_values(Z, "contour")
     fig, ax = plt.subplots(figsize=(7, 5))
     masked = np.ma.masked_invalid(Z)
     extent = (float(X.min()), float(X.max()), float(Y.min()), float(Y.max()))
+    ax.set_aspect("equal", adjustable="box")
     if _is_constant(finite):
-        ax.imshow(masked, origin="lower", extent=extent, aspect="auto", cmap="viridis")
+        ax.imshow(masked, origin="lower", extent=extent, aspect="equal", cmap="viridis")
         ax.text(0.5, 0.5, f"Constant landscape: f = {float(finite[0]):g}",
                 transform=ax.transAxes, ha="center", va="center")
     else:
@@ -386,10 +389,11 @@ def plot_landscape_surface(X, Y, Z, title, xlabel="x0", ylabel="x1"):
 
 
 def landscape_meta(function_name, dim, varied, fixed_values, rep, lb, ub,
-                   grid_n=LANDSCAPE_GRID):
+                   grid_n=LANDSCAPE_GRID, display_name=None):
     """Slice metadata for display labels and ZIP archives."""
     return {
         "function": function_name,
+        "display_name": display_name or function_name,
         "dimensions": int(dim),
         "varied_coordinates": [f"x{i}" for i in varied] if varied else ["x0"],
         "fixed_coordinates": {f"x{k}": float(v) for k, v in fixed_values.items()},
@@ -518,8 +522,9 @@ def _playback_controls(frame_names, frame_ms):
 
 
 def build_animation_1d(xs, ys, trajectory, function_name, repetition, seed,
-                       lb, ub, frame_ms=300):
+                       lb, ub, frame_ms=300, display_name=None):
     """Animate agents on the 1D objective-versus-coordinate curve."""
+    label = display_name or function_name
     go = _require_plotly()
     xs = np.asarray(xs, dtype=float)
     ys = np.asarray(ys, dtype=float)
@@ -543,7 +548,7 @@ def build_animation_1d(xs, ys, trajectory, function_name, repetition, seed,
     agents_y = np.asarray(trajectory.population_fitness, dtype=float)[0]
     best_x = float(bests[0, 0])
     best_y = float(best_fit[0])
-    title0 = _anim_title(function_name, repetition, seed, it0, best_y)
+    title0 = _anim_title(label, repetition, seed, it0, best_y)
     layout = _anim_base_layout(title0)
     layout.update({
         "xaxis": {"range": [float(lb), float(ub)], "title": "x0"},
@@ -568,7 +573,7 @@ def build_animation_1d(xs, ys, trajectory, function_name, repetition, seed,
                                y=np.asarray(trajectory.population_fitness, dtype=float)[k].tolist()),
                     go.Scatter(x=[float(bests[k, 0])], y=[float(best_fit[k])]),
                 ],
-                layout={"title": _anim_title(function_name, repetition, seed, it, float(best_fit[k]))},
+                layout={"title": _anim_title(label, repetition, seed, it, float(best_fit[k]))},
             )
             for k, it in enumerate(frame_iters)
         ],
@@ -580,8 +585,9 @@ def build_animation_1d(xs, ys, trajectory, function_name, repetition, seed,
 
 def build_animation_contour(X, Y, Z, trajectory, ix, iy, function_name,
                             repetition, seed, lb, ub, frame_ms=300,
-                            projected=True):
+                            projected=True, display_name=None):
     """Animate agent projections on a fixed contour slice."""
+    label = display_name or function_name
     go = _require_plotly()
     X = np.asarray(X, dtype=float)
     Y = np.asarray(Y, dtype=float)
@@ -601,7 +607,7 @@ def build_animation_contour(X, Y, Z, trajectory, ix, iy, function_name,
     ax, ay = pops[0, :, ix].tolist(), pops[0, :, iy].tolist()
     hover0 = [f"agent {i}<br>actual fitness {float(pop_fit[0, i]):.6g}" for i in range(len(ax))]
     layout = _anim_base_layout(
-        _anim_title(function_name, repetition, seed, it0, float(best_fit[0])))
+        _anim_title(label, repetition, seed, it0, float(best_fit[0])))
     layout.update({
         "xaxis": {"range": [float(lb), float(ub)], "title": f"x{ix}",
                   "scaleanchor": "y", "scaleratio": 1},
@@ -640,7 +646,7 @@ def build_animation_contour(X, Y, Z, trajectory, ix, iy, function_name,
                         text=[f"best<br>actual fitness {float(best_fit[k]):.6g}"],
                     ),
                 ],
-                layout={"title": _anim_title(function_name, repetition, seed, it, float(best_fit[k]))},
+                layout={"title": _anim_title(label, repetition, seed, it, float(best_fit[k]))},
             )
             for k, it in enumerate(frame_iters)
         ],
@@ -652,13 +658,14 @@ def build_animation_contour(X, Y, Z, trajectory, ix, iy, function_name,
 
 def build_animation_surface(X, Y, Z, trajectory, ix, iy, fixed, func,
                             function_name, repetition, seed, lb, ub,
-                            frame_ms=300, projected=True):
+                            frame_ms=300, projected=True, display_name=None):
     """Animate agent projections above a fixed 3D surface slice.
 
     Marker heights are the slice evaluation at the projected coordinates with
     the remaining coordinates fixed; hover text reports the actual
     full-dimensional fitness.
     """
+    label = display_name or function_name
     go = _require_plotly()
     X = np.asarray(X, dtype=float)
     Y = np.asarray(Y, dtype=float)
@@ -696,7 +703,7 @@ def build_animation_surface(X, Y, Z, trajectory, ix, iy, fixed, func,
     best_label = (f"Best (x{ix}×x{iy} projection)" if projected else "Best")
     it0 = frame_iters[0]
     layout = _anim_base_layout(
-        _anim_title(function_name, repetition, seed, it0, float(best_fit[0])))
+        _anim_title(label, repetition, seed, it0, float(best_fit[0])))
     layout.update({
         "scene": {
             "xaxis": {"range": [float(lb), float(ub)], "title": f"x{ix}"},
@@ -741,7 +748,7 @@ def build_animation_surface(X, Y, Z, trajectory, ix, iy, fixed, func,
                         text=[f"best<br>actual fitness {float(best_fit[k]):.6g}"],
                     ),
                 ],
-                layout={"title": _anim_title(function_name, repetition, seed, it, float(best_fit[k]))},
+                layout={"title": _anim_title(label, repetition, seed, it, float(best_fit[k]))},
             )
             for k, it in enumerate(frame_iters)
         ],
@@ -757,10 +764,11 @@ def animation_html(fig):
 
 
 def animation_meta(function_name, dim, kind, varied, fixed_values, rep, seed,
-                   frames, lb, ub, grid_n=LANDSCAPE_GRID):
+                   frames, lb, ub, grid_n=LANDSCAPE_GRID, display_name=None):
     """Metadata describing one generated agent animation."""
     return {
         "function": function_name,
+        "display_name": display_name or function_name,
         "dimensions": int(dim),
         "kind": kind,
         "varied_coordinates": [f"x{i}" for i in varied],

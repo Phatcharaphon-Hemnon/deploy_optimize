@@ -17,7 +17,7 @@ def rosenbrock(x):
 def powell_sum(x):
     total = 0
     for i in range(len(x)):
-        total += abs(i * (x[i]**2))
+        total += abs(x[i]) ** (i + 2)
     return total
 
 def schwefel(x):
@@ -28,7 +28,7 @@ def schwefel(x):
 def paraboloid(x):
     total = 0
     for i in range(len(x)):
-        total = x[i]**2
+        total += x[i]**2
     return total
 def rastrigin(x):
     total = 0

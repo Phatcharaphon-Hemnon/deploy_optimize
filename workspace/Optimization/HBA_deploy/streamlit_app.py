@@ -15,7 +15,7 @@ import streamlit as st
 
 import charts
 import hba_experiment
-from hba_experiment import DEFAULTS, FORMULAS, FUNCTION_ORDER, KNOWN_OPTIMUM, LIMITS, MINIMIZER_NOTES
+from hba_experiment import DEFAULTS, DISPLAY_NAMES, FORMULAS, FUNCTION_ORDER, KNOWN_OPTIMUM, LIMITS, MINIMIZER_NOTES, MODEL_REVISION
 
 FUNCTION_OPTIONS = ["All functions"] + FUNCTION_ORDER
 
@@ -27,11 +27,15 @@ st.caption(
     "Comparisons are results for these local implementations (see Function details)."
 )
 
+def _display(name):
+    return DISPLAY_NAMES.get(name, name)
+
+
 LOCAL_IMPL_NOTE = (
-    "These are results for the local implementations in `_tool.py`, not necessarily "
-    "the textbook benchmarks of the same names: `paraboloid` uses only the last "
-    "coordinate, `powell_sum` computes weighted squares, and `schwefel` computes "
-    "an absolute sum."
+    "These are results for the local implementations in `_tool.py`: `paraboloid` "
+    "sums squares over every coordinate (Paraboloid/Sphere), `powell_sum` is the "
+    "Sum of Different Powers, and `schwefel` computes an absolute sum (Absolute "
+    "Sum/L1), not the commonly named Schwefel 2.26 objective."
 )
 SCALE_NOTE = (
     "Function scales differ, so lower raw errors on one function than on another "
@@ -62,6 +66,27 @@ def _init_state():
         st.session_state["hba_zip_error"] = None
     if "hba_zip_prepared_for" not in st.session_state:
         st.session_state["hba_zip_prepared_for"] = None
+    if "hba_model_revision" not in st.session_state:
+        st.session_state["hba_model_revision"] = MODEL_REVISION
+
+
+def _settings_revision_current(settings):
+    """True when retained settings match the current objective/optimizer model."""
+    return getattr(settings, "model_revision", None) == MODEL_REVISION
+
+
+def _clear_results_state():
+    st.session_state["hba_results"] = None
+    st.session_state["hba_settings"] = None
+    st.session_state["hba_computed"] = None
+    st.session_state["hba_landscapes"] = {}
+    st.session_state["hba_landscape_pngs"] = {}
+    st.session_state["hba_landscape_meta"] = {}
+    st.session_state["hba_animation_htmls"] = {}
+    st.session_state["hba_animation_meta"] = {}
+    st.session_state["hba_zip_bytes"] = None
+    st.session_state["hba_zip_error"] = None
+    st.session_state["hba_zip_prepared_for"] = None
 
 
 def _run_form():
@@ -69,6 +94,7 @@ def _run_form():
         st.subheader("Experiment configuration")
         functions = st.multiselect(
             "Functions", FUNCTION_ORDER, default=list(FUNCTION_ORDER),
+            format_func=_display,
             help="Select any subset of the six local objectives; at least one is required.",
         )
         col1, col2, col3 = st.columns(3)
@@ -182,6 +208,7 @@ def _execute(cfg):
     st.session_state["hba_zip_bytes"] = None
     st.session_state["hba_zip_error"] = None
     st.session_state["hba_zip_prepared_for"] = None
+    st.session_state["hba_model_revision"] = MODEL_REVISION
     progress.progress(1.0)
     origin = "drawn at submission" if seed_auto else "explicit"
     status.success(
@@ -224,7 +251,7 @@ def _comparison_tab(results, settings, computed):
         help="Symmetric-log preserves exact zeros with a linear region below 1e-12.",
     )
     if error_scale == "symlog":
-        fig = charts.plot_combined_mean_error(computed)
+        fig = charts.plot_combined_mean_error(computed, display_names=DISPLAY_NAMES)
     else:
         fig, ax = plt.subplots(figsize=(8, 4.5))
         for name, entry in computed.items():
@@ -248,8 +275,9 @@ def _comparison_tab(results, settings, computed):
 
 def _function_tab(results, settings, computed):
     names = list(results)
-    name = st.selectbox("Function", names, key="detail_function")
+    name = st.selectbox("Function", names, key="detail_function", format_func=_display)
     entry = computed[name]
+    st.markdown(f"**{_display(name)}**")
     st.markdown(f"**Formula (local implementation):** `{FORMULAS[name]}`")
     st.markdown(f"**Minimizer:** {MINIMIZER_NOTES[name]}")
     if settings.repetitions < 2:
@@ -260,7 +288,7 @@ def _function_tab(results, settings, computed):
         "(iteration 0 is the best initialized agent), with a mean ± one "
         "sample-standard-deviation band."
     )
-    fig_avg = charts.plot_average_best(entry["per_iteration"], f"{name}: average-best fitness")
+    fig_avg = charts.plot_average_best(entry["per_iteration"], f"{_display(name)}: average-best fitness")
     st.pyplot(fig_avg)
     plt.close(fig_avg)
     st.subheader("Optimum error")
@@ -269,7 +297,7 @@ def _function_tab(results, settings, computed):
         key="detail_scale",
         help="Symmetric-log preserves exact zeros with a linear region below 1e-12.",
     )
-    fig_err = charts.plot_error(entry["per_iteration"], f"{name}: error", scale=error_scale)
+    fig_err = charts.plot_error(entry["per_iteration"], f"{_display(name)}: error", scale=error_scale)
     st.pyplot(fig_err)
     plt.close(fig_err)
     st.subheader("Best positions per repetition")
@@ -308,7 +336,7 @@ def _show_landscape_fig(make, png_key, download_label, file_name, dl_key, meta_k
         return
     try:
         png = _landscape_png(png_key, fig)
-        st.pyplot(fig)
+        st.pyplot(fig, use_container_width=True)
     finally:
         plt.close(fig)
     st.download_button(
@@ -321,7 +349,7 @@ def _render_landscape_kind(kind, grid, labels, name, png_prefix, meta):
     run_id = st.session_state["hba_run_id"]
     if kind == "line":
         xs, ys = grid
-        title = f"{name}: objective vs {labels['varied']}"
+        title = f"{_display(name)}: objective vs {labels['varied']}"
         _show_landscape_fig(
             lambda: charts.plot_landscape_line(xs, ys, title, xlabel=labels["varied"]),
             (run_id, png_prefix, "line"),
@@ -331,11 +359,11 @@ def _render_landscape_kind(kind, grid, labels, name, png_prefix, meta):
         return
     X, Y, Z = grid
     if kind == "contour":
-        title = f"{name}: contour over {labels['varied']}"
+        title = f"{_display(name)}: contour over {labels['varied']}"
         make = lambda: charts.plot_landscape_contour(
             X, Y, Z, title, xlabel=labels["x"], ylabel=labels["y"])
     else:
-        title = f"{name}: surface over {labels['varied']}"
+        title = f"{_display(name)}: surface over {labels['varied']}"
         make = lambda: charts.plot_landscape_surface(
             X, Y, Z, title, xlabel=labels["x"], ylabel=labels["y"])
     _show_landscape_fig(
@@ -361,7 +389,8 @@ def _landscape_section(name, results, settings):
         grid_key = (run_id, name, "line")
         grid = _cached_grid(
             grid_key, lambda: charts.evaluate_landscape_1d(func, lb, ub))
-        meta = charts.landscape_meta(name, dim, [0], {}, None, lb, ub)
+        meta = charts.landscape_meta(name, dim, [0], {}, None, lb, ub,
+                               display_name=_display(name))
         st.markdown("**Varied:** `x0`. Full 1D objective landscape.")
         _render_landscape_kind("line", grid, {"varied": "x0"}, name,
                                f"{name}_d1", meta)
@@ -379,7 +408,8 @@ def _landscape_section(name, results, settings):
             lambda: charts.evaluate_landscape_2d(
                 func, dim, lb, ub, 0, 1, np.zeros(dim)),
         )
-        meta = charts.landscape_meta(name, dim, [0, 1], {}, None, lb, ub)
+        meta = charts.landscape_meta(name, dim, [0, 1], {}, None, lb, ub,
+                                 display_name=_display(name))
         st.markdown("**Varied:** `x0`, `x1`. Full 2D objective landscape.")
         labels = {"varied": "`x0` × `x1`", "x": "x0", "y": "x1"}
         prefix = f"{name}_x0_x1"
@@ -407,7 +437,8 @@ def _landscape_section(name, results, settings):
         lambda: charts.evaluate_landscape_2d(func, dim, lb, ub, ix, iy, fixed),
     )
     fixed_values = {k: float(fixed[k]) for k in range(dim) if k not in (ix, iy)}
-    meta = charts.landscape_meta(name, dim, [ix, iy], fixed_values, rep, lb, ub)
+    meta = charts.landscape_meta(name, dim, [ix, iy], fixed_values, rep, lb, ub,
+                             display_name=_display(name))
     fixed_text = ", ".join(f"`x{k}={v:g}`" for k, v in fixed_values.items())
     st.markdown(
         f"**Varied:** `{cx_label}` × `{cy_label}`. "
@@ -483,14 +514,15 @@ def _animation_section(name, results, settings):
         try:
             fig = charts.build_animation_1d(
                 xs, ys, trajectory, name, rep, int(trajectory.seed),
-                lb, ub, frame_ms=frame_ms)
+                lb, ub, frame_ms=frame_ms, display_name=_display(name))
         except (ValueError, ImportError) as exc:
             st.warning(str(exc))
             return
         st.plotly_chart(fig, use_container_width=True, key=f"anim_plot_r{run_id}_{name}_line")
         html = charts.animation_html(fig)
         meta = charts.animation_meta(name, dim, "line", [0], {}, rep,
-                                     int(trajectory.seed), n_frames, lb, ub)
+                                     int(trajectory.seed), n_frames, lb, ub,
+                                     display_name=_display(name))
         st.session_state["hba_animation_htmls"][(run_id, name, "line")] = html
         st.session_state["hba_animation_meta"][(run_id, name, "line")] = meta
         st.download_button(
@@ -555,19 +587,21 @@ def _animation_section(name, results, settings):
         if kind_key == "contour":
             fig = charts.build_animation_contour(
                 X, Y, Z, trajectory, ix, iy, name, rep, int(trajectory.seed),
-                lb, ub, frame_ms=frame_ms, projected=(dim > 2))
+                lb, ub, frame_ms=frame_ms, projected=(dim > 2),
+                display_name=_display(name))
         else:
             fig = charts.build_animation_surface(
                 X, Y, Z, trajectory, ix, iy, fixed, func, name, rep,
                 int(trajectory.seed), lb, ub, frame_ms=frame_ms,
-                projected=(dim > 2))
+                projected=(dim > 2), display_name=_display(name))
     except (ValueError, ImportError) as exc:
         st.warning(str(exc))
         return
     st.plotly_chart(fig, use_container_width=True, key=f"anim_plot_r{run_id}_{name}_{kind_key}_{ix}_{iy}")
     html = charts.animation_html(fig)
     meta = charts.animation_meta(name, dim, kind_key, [ix, iy], fixed_values, rep,
-                                 int(trajectory.seed), n_frames, lb, ub)
+                                 int(trajectory.seed), n_frames, lb, ub,
+                                 display_name=_display(name))
     akey = (run_id, name, kind_key) if dim == 2 else (run_id, name, kind_key, ix, iy)
     st.session_state["hba_animation_htmls"][akey] = html
     st.session_state["hba_animation_meta"][akey] = meta
@@ -602,7 +636,7 @@ def _downloads_tab(results, settings, computed):
             continue
         entry = computed[name]
         runs = results[name]
-        st.markdown(f"**{name}**")
+        st.markdown(f"**{_display(name)}**")
         col1, col2, col3 = st.columns(3)
         with col1:
             st.download_button(
@@ -621,21 +655,21 @@ def _downloads_tab(results, settings, computed):
                 key=f"dl_runs_{name}",
             )
         with col2:
-            fig_avg = charts.plot_average_best(entry["per_iteration"], f"{name}: average-best fitness")
+            fig_avg = charts.plot_average_best(entry["per_iteration"], f"{_display(name)}: average-best fitness")
             st.download_button(
                 "average-best PNG", charts.figure_png(fig_avg),
                 file_name=f"{name}_average_best.png", mime="image/png",
                 key=f"dl_avg_{name}",
             )
             plt.close(fig_avg)
-            fig_err = charts.plot_error(entry["per_iteration"], f"{name}: error", scale="symlog")
+            fig_err = charts.plot_error(entry["per_iteration"], f"{_display(name)}: error", scale="symlog")
             st.download_button(
                 "error PNG (symlog)", charts.figure_png(fig_err),
                 file_name=f"{name}_error_symlog.png", mime="image/png",
                 key=f"dl_errlog_{name}",
             )
             plt.close(fig_err)
-            fig_lin = charts.plot_error(entry["per_iteration"], f"{name}: error", scale="linear")
+            fig_lin = charts.plot_error(entry["per_iteration"], f"{_display(name)}: error", scale="linear")
             st.download_button(
                 "error PNG (linear)", charts.figure_png(fig_lin),
                 file_name=f"{name}_error_linear.png", mime="image/png",
@@ -694,10 +728,10 @@ def _downloads_tab(results, settings, computed):
             plt.close(fig_comb)
             for name in results:
                 entry = computed[name]
-                fig_avg = charts.plot_average_best(entry["per_iteration"], f"{name}: average-best fitness")
+                fig_avg = charts.plot_average_best(entry["per_iteration"], f"{_display(name)}: average-best fitness")
                 figures[f"{name}_average_best.png"] = charts.figure_png(fig_avg)
                 plt.close(fig_avg)
-                fig_err = charts.plot_error(entry["per_iteration"], f"{name}: error", scale="symlog")
+                fig_err = charts.plot_error(entry["per_iteration"], f"{_display(name)}: error", scale="symlog")
                 figures[f"{name}_error_symlog.png"] = charts.figure_png(fig_err)
                 plt.close(fig_err)
             for (rid, prefix, kind), png in sorted(
@@ -768,6 +802,16 @@ def main():
     results = st.session_state["hba_results"]
     settings = st.session_state["hba_settings"]
     computed = st.session_state["hba_computed"]
+    if results is not None and not _settings_revision_current(settings):
+        # Objective/optimizer model changed since these results were produced:
+        # clear everything derived from them and request a new run (no auto-rerun).
+        _clear_results_state()
+        results = None
+        st.warning(
+            "Previously completed results were produced by an older model revision "
+            f"(expected revision {MODEL_REVISION}) and have been cleared. "
+            "Press **Run experiment** for a new run with the current formulas."
+        )
     if results is None:
         st.info(
             "Configure the experiment above and press **Run experiment**. "

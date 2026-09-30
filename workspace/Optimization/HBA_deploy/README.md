@@ -85,12 +85,18 @@ claim that these are each benchmark's conventional bounds.
 
 For `i = 0, ..., D - 1`, exactly as implemented in `_tool.py`:
 
-- `rosenbrock`: sum of `100 * (x[i]**2 - x[i+1])**2 + (1 - x[i])**2` for adjacent coordinates.
-- `powell_sum`: sum of `abs(i * (x[i]**2))` — weighted squares (`i` starts at 0, so the first term is always 0).
-- `schwefel`: sum of `abs(x[i])` — an absolute sum, not the commonly named Schwefel 2.26 objective.
-- `paraboloid`: `x[-1]**2` — the loop overwrites its accumulator, so only the last coordinate is used.
-- `rastrigin`: `10*D + sum(x[i]**2 - 10*cos(2*pi*x[i]))`.
-- `griewank`: `1 + sum(x[i]**2)/4000 - prod(cos(x[i] / sqrt(i + 1)))`.
+- `rosenbrock` (Rosenbrock): sum of `100 * (x[i]**2 - x[i+1])**2 + (1 - x[i])**2` for adjacent coordinates.
+- `powell_sum` (Sum of Different Powers): sum of `abs(x[i])**(i + 2)` — exponents run `2..D+1` (`i` starts at 0).
+- `schwefel` (Absolute Sum (L1)): sum of `abs(x[i])` — an absolute sum, not the commonly named Schwefel 2.26 objective.
+- `paraboloid` (Paraboloid (Sphere)): sum of `x[i]**2` over every coordinate.
+- `rastrigin` (Rastrigin): `10*D + sum(x[i]**2 - 10*cos(2*pi*x[i]))`.
+- `griewank` (Griewank): `1 + sum(x[i]**2)/4000 - prod(cos(x[i] / sqrt(i + 1)))`.
+
+Display labels in charts, legends, and export metadata use the parenthesized
+names; internal identifiers (code keys, CSV/JSON fields, archive paths) are
+unchanged. Results carry a model revision (`MODEL_REVISION` in
+`hba_experiment`); the dashboard clears results retained from older revisions
+instead of mixing them with new runs.
 
 All comparisons are results for these local implementations. HBA uses the
 standard update equations implemented once in `hba_experiment.optimize`:
