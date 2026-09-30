@@ -1,8 +1,9 @@
 """Configurable Honey Badger Algorithm (HBA) experiments.
 
-This module reuses the exact update equations from ``main.py`` (digging /
-honey phases, intensity, density factor ``alpha``, greedy acceptance) without
-importing ``main.py`` itself (which executes an experiment on import).
+This module holds the single HBA implementation used here (standard digging /
+honey phases, intensity, density factor ``alpha``, greedy acceptance). The
+legacy ``main.py`` demonstration calls :func:`optimize` instead of keeping a
+second optimization loop.
 
 Objective functions are imported directly from ``_tool.py`` exactly as
 implemented there; they are intentionally not corrected here. In particular:
@@ -21,10 +22,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
+from typing import Optional
 
 import numpy as np
 
-from _tool import _DistanceBetween
 from _tool import griewank
 from _tool import paraboloid
 from _tool import powell_sum
@@ -81,9 +82,9 @@ DEFAULTS = {
     "seed": 42,
 }
 
-#: HBA constants matching ``main.py``.
-_HBA_C = 1.0
+#: Honey-phase coefficient of the standard HBA equations.
 _HBA_BETA = 6.0
+#: Guard added to the best-distance before squaring in the intensity denominator.
 _HBA_EPS = 1e-10
 
 #: Safety caps so a dashboard run stays within available resources.
@@ -304,7 +305,7 @@ class RunResult:
     dimensions: int = 0
     agents: int = 0
     iterations: int = 0
-    trajectory: object = None  # optional TrajectoryRecording for the recorded repetition
+    trajectory: Optional[TrajectoryRecording] = None  # set for the recorded repetition
 
     def __post_init__(self):
         self.best_position = np.asarray(self.best_position, dtype=float)
@@ -357,19 +358,64 @@ class ExperimentSettings:
 
 
 # ---------------------------------------------------------------------------
-# Optimizer (equations matching ``main.py``)
+# Optimizer (standard HBA equations)
 # ---------------------------------------------------------------------------
+
+
+def _squared_euclidean(a, b):
+    """Squared Euclidean distance between two vectors."""
+    diff = np.asarray(a, dtype=float) - np.asarray(b, dtype=float)
+    return float(np.dot(diff, diff))
+
+
+def propose_candidate(best_position, position, intensity, alpha, digging, sign, coeffs):
+    """Propose one HBA candidate from caller-supplied random coefficients.
+
+    Pure function of its arguments (no randomness): with
+    ``direction = best_position - position``,
+
+    - digging: ``best + F * beta * I * best + F * r3 * alpha * direction * shape``,
+      where ``shape = abs(cos(2*pi*r4) * (1 - cos(2*pi*r5)))`` and
+      ``coeffs = (r3, r4, r5)`` are per-coordinate arrays;
+    - honey: ``best + F * r7 * alpha * direction`` with ``coeffs = (r7,)``.
+
+    ``sign`` is ``F`` in ``{-1, +1}``. Clipping to bounds happens in
+    :func:`optimize`, not here, so hand calculations can test the equations
+    directly.
+    """
+    best = np.asarray(best_position, dtype=float)
+    pos = np.asarray(position, dtype=float)
+    direction = best - pos
+    if digging:
+        r3, r4, r5 = (np.asarray(c, dtype=float) for c in coeffs)
+        shape = np.abs(
+            np.cos(2.0 * np.pi * r4) * (1.0 - np.cos(2.0 * np.pi * r5))
+        )
+        return (
+            best
+            + sign * _HBA_BETA * float(intensity) * best
+            + sign * r3 * float(alpha) * direction * shape
+        )
+    r7 = np.asarray(coeffs[0], dtype=float)
+    return best + sign * r7 * float(alpha) * direction
 
 
 def optimize(function_name, dimensions, agents, iterations, lb, ub, seed,
              record_frames=None, record_repetition=1):
     """Run one HBA repetition; return a :class:`RunResult`.
 
-    Uses the update equations from ``main.py`` with ``c=1``, ``beta=6`` and
-    ``eps=1e-10``: uniform initialization scaled to ``[lb, ub]``, proper
-    best-population initialization (argmin fitness), per-agent digging/honey
-    updates with clipping to bounds, and greedy acceptance for both the agent
-    and the global best (``<=`` comparisons, as in ``main.py``).
+    Standard Honey Badger equations: uniform initialization scaled to
+    ``[lb, ub]`` with fitness evaluated once per agent, an independent copy
+    of the best position/fitness, density factor
+    ``alpha = 2 * exp(-t / iterations)`` for ``t = 1..iterations`` with
+    ``beta = 6``, per-iteration intensities from a population snapshot
+    (squared Euclidean neighbor distances with circular indexing over
+    ``r * S / (4 * pi * (d + 1e-10)**2)``), per-agent digging/honey choice
+    with equal probability, one sign ``F`` from ``{-1, +1}``, independent
+    per-coordinate coefficients, clipping to bounds, a single evaluation per
+    candidate, greedy acceptance (``<=`` the agent's fitness, updating the
+    copied global best immediately), and history recorded after each complete
+    iteration (index 0 is the initialization).
 
     When ``record_frames`` is a collection of iteration numbers (0 is the
     initialization, ``iterations`` is the final state), population snapshots
@@ -388,9 +434,9 @@ def optimize(function_name, dimensions, agents, iterations, lb, ub, seed,
     def _snapshot(store_iters, store_pops, store_bests, store_popfit, store_bestfit, it):
         store_iters.append(int(it))
         store_pops.append(np.array(pop, dtype=float, copy=True))
-        store_bests.append(np.array(pop[best_idx], dtype=float, copy=True))
+        store_bests.append(np.array(best_position, dtype=float, copy=True))
         store_popfit.append(np.array(fitness, dtype=float, copy=True))
-        store_bestfit.append(float(fitness[best_idx]))
+        store_bestfit.append(float(best_fitness))
 
     rng = np.random.default_rng(seed)
     pop = rng.uniform(low=0.0, high=1.0, size=(agents, dimensions)) * (ub_f - lb_f) + lb_f
@@ -398,60 +444,56 @@ def optimize(function_name, dimensions, agents, iterations, lb, ub, seed,
     fitness = np.empty(agents, dtype=float)
     for i in range(agents):
         fitness[i] = _evaluate(func, pop[i])
-    best_idx = int(np.argmin(fitness))
-    best_fitness = float(fitness[best_idx])
+    best_position = np.array(pop[int(np.argmin(fitness))], dtype=float, copy=True)
+    best_fitness = float(np.min(fitness))
     history = [best_fitness]
     rec_iters, rec_pops, rec_bests, rec_popfit, rec_bestfit = [], [], [], [], []
     if frame_set is not None and 0 in frame_set:
         _snapshot(rec_iters, rec_pops, rec_bests, rec_popfit, rec_bestfit, 0)
 
-    for k in range(iterations):
-        alpha = _HBA_C * math.exp(-k / iterations)
+    for t in range(1, iterations + 1):
+        alpha = 2.0 * math.exp(-t / iterations)
+        snapshot = pop.copy()
+        intensities = np.empty(agents, dtype=float)
         for i in range(agents):
-            r3 = float(rng.uniform(low=0.0, high=1.0))
-            r4 = float(rng.uniform(low=0.0, high=1.0))
-            r5 = float(rng.uniform(low=0.0, high=1.0))
-            r7 = float(rng.uniform(low=0.0, high=1.0))
-            f_draw = float(rng.uniform(low=0.0, high=1.0))
-            flag = 1 if f_draw >= 0.5 else -1
-            coin = float(rng.uniform(low=0.0, high=1.0))
-            dist_next = _DistanceBetween(pop[i], pop[(i + 1) % agents])
-            if dist_next is None:
-                raise ValueError("Position dimensionality mismatch in distance computation.")
-            dt2 = float(dist_next) ** 2
-            dist_best = _DistanceBetween(pop[best_idx], pop[i])
-            if dist_best is None:
-                raise ValueError("Position dimensionality mismatch in distance computation.")
-            dt = float(dist_best) + _HBA_EPS
-            intensity_draw = float(rng.uniform(low=0.0, high=1.0))
-            intensity = intensity_draw * dt2 / (4.0 * math.pi * (dt**2))
-            best_pos = pop[best_idx]
+            neighbor_dist2 = _squared_euclidean(snapshot[i], snapshot[(i + 1) % agents])
+            best_dist = math.sqrt(_squared_euclidean(best_position, snapshot[i]))
+            draw = float(rng.random())
+            intensities[i] = (
+                draw * neighbor_dist2 / (4.0 * math.pi * (best_dist + _HBA_EPS) ** 2)
+            )
+        for i in range(agents):
+            position = pop[i]
+            coin = float(rng.random())
+            f_draw = float(rng.random())
+            sign = 1 if f_draw >= 0.5 else -1
             if coin < 0.5:
-                shape = math.cos(2.0 * math.pi * r4) * (1.0 - math.cos(2.0 * math.pi * r5))
-                new_pos = best_pos + (flag * _HBA_BETA * intensity) * best_pos + (
-                    flag * r3 * alpha * dt * shape
+                r3, r4, r5 = rng.random((3, dimensions))
+                new_pos = propose_candidate(
+                    best_position, position, intensities[i], alpha,
+                    True, sign, (r3, r4, r5),
                 )
             else:
-                new_pos = best_pos + flag * r7 * alpha * dt
+                r7 = rng.random(dimensions)
+                new_pos = propose_candidate(
+                    best_position, position, intensities[i], alpha,
+                    False, sign, (r7,),
+                )
             new_pos = np.clip(np.asarray(new_pos, dtype=float), lb_f, ub_f)
             new_pos = _check_finite_vector(new_pos, "Updated position")
             if new_pos.shape[0] != dimensions:
                 raise ValueError("Updated position dimensionality mismatch.")
             new_fit = _evaluate(func, new_pos)
-            old_best = float(fitness[best_idx])
             if new_fit <= float(fitness[i]):
                 pop[i] = new_pos
                 fitness[i] = new_fit
-            if new_fit <= old_best:
-                # ``<=`` moves the best index on ties, matching ``main.py``.
-                best_idx = i
-        history.append(float(np.min(fitness)))
-        if frame_set is not None and (k + 1) in frame_set:
-            _snapshot(rec_iters, rec_pops, rec_bests, rec_popfit, rec_bestfit, k + 1)
+            if new_fit <= best_fitness:
+                best_fitness = float(new_fit)
+                best_position = np.array(new_pos, dtype=float, copy=True)
+        history.append(best_fitness)
+        if frame_set is not None and t in frame_set:
+            _snapshot(rec_iters, rec_pops, rec_bests, rec_popfit, rec_bestfit, t)
 
-    best_idx = int(np.argmin(fitness))
-    best_fitness = float(fitness[best_idx])
-    best_position = np.array(pop[best_idx], dtype=float)
     trajectory = None
     if frame_set is not None:
         trajectory = TrajectoryRecording(
@@ -467,7 +509,7 @@ def optimize(function_name, dimensions, agents, iterations, lb, ub, seed,
     return RunResult(
         function_name=function_name,
         seed=seed,
-        best_position=best_position,
+        best_position=np.asarray(best_position, dtype=float),
         best_fitness=best_fitness,
         best_history=np.asarray(history, dtype=float),
         dimensions=dimensions,

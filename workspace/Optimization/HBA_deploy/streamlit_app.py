@@ -22,7 +22,8 @@ FUNCTION_OPTIONS = ["All functions"] + FUNCTION_ORDER
 st.set_page_config(page_title="HBA comparison", layout="wide")
 st.title("Honey Badger Algorithm — comparison across local objectives")
 st.caption(
-    "Configurable HBA runs using the update equations from `main.py`. "
+    "Configurable HBA runs using the standard Honey Badger update equations "
+    "(digging/honey phases with density factor `alpha = 2*exp(-t/T)`). "
     "Comparisons are results for these local implementations (see Function details)."
 )
 

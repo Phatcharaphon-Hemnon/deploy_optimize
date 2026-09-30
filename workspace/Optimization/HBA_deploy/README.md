@@ -92,9 +92,19 @@ For `i = 0, ..., D - 1`, exactly as implemented in `_tool.py`:
 - `rastrigin`: `10*D + sum(x[i]**2 - 10*cos(2*pi*x[i]))`.
 - `griewank`: `1 + sum(x[i]**2)/4000 - prod(cos(x[i] / sqrt(i + 1)))`.
 
-All comparisons are results for these local implementations. HBA reuses the
-update equations and greedy acceptance from `main.py`, with proper
-best-population initialization.
+All comparisons are results for these local implementations. HBA uses the
+standard update equations implemented once in `hba_experiment.optimize`:
+uniform initialization with one fitness evaluation per agent, an independent
+best-position/fitness copy, density factor `alpha = 2*exp(-t/T)` for
+`t = 1..T` with `beta = 6`, per-iteration intensities from a population
+snapshot (`r*S / (4*pi*(d + 1e-10)**2)` with squared Euclidean neighbor
+distances and circular indexing), per-agent digging/honey choice with equal
+probability, one sign `F` from `{-1, +1}`, independent per-coordinate random
+coefficients, clipping to bounds, one evaluation per candidate, and greedy
+acceptance (a candidate no worse than the agent's fitness is kept, updating
+the global-best copy immediately). History index 0 is the initialization.
+Same seeds reproduce a run in the same software environment; results differ
+from the pre-correction implementation.
 
 ## Python API
 
@@ -117,15 +127,16 @@ statistics, Matplotlib convergence figures, dimension-aware landscape
 evaluation/plotting helpers, and in-memory CSV/JSON/PNG/ZIP exports (no new
 plotting dependencies).
 
-## Existing scripts (unchanged)
+## Existing scripts
 
-`_tool.py`, `main.py`, and `plot.py` are left as-is.
+`_tool.py` and `plot.py` are left as-is.
 
 - `main.py` runs a fixed HBA demonstration: 50 agents, 3 dimensions, bounds
-  `[-5, 5]`, 20 iterations on the Griewank objective (`plot._fitness`), with
-  greedy acceptance. It saves per-iteration frames to `frames/`, builds an
-  `.mp4` video, saves a 3D surface/contour figure, and prints the best fitness
-  and position.
+  `[-5, 5]`, 20 iterations on the Griewank objective (`plot._fitness`) by
+  calling `hba_experiment.optimize` (the single implementation) with a random
+  seed and a full trajectory recording. It saves per-iteration frames to
+  `frames/`, builds an `.mp4` video, saves a 3D surface/contour figure, and
+  prints the best fitness and position.
 - `plot.py` provides `plot_results` (3D surface + contour) and the `Monitor`
   frame/video helper used by `main.py`.
 - `_tool.py` defines the six objectives above plus the `_DistanceBetween`
